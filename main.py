@@ -1,7 +1,8 @@
 import sys
 
+from PySide6.QtGui import QPixmap
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
-from PySide6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWidgets import QApplication, QMainWindow,  QLabel
 
 
 class MainWindow(QMainWindow):
@@ -10,6 +11,16 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Simple Image Viewer")
         self.resize(800, 600)
+
+        image_label = QLabel()
+
+        # webp を読み込んで Qt が画面表示できる画像データに変換する
+        pixmap = QPixmap("nekochan.webp")
+        # QLabel による画像表示
+        image_label.setPixmap(pixmap)
+
+        # QMainWindow の中央コンテンツを image_label にする
+        self.setCentralWidget(image_label)
 
 
 def main():
