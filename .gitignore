@@ -5,3 +5,7 @@ node_modules
 
 .DS_Store
 myworks
+
+.venv/
+__pycache__/
+*.pyc
