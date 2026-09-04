@@ -1,7 +1,7 @@
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QTransform
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
 from PySide6.QtWidgets import (
     QApplication,
@@ -33,14 +33,27 @@ class MainWindow(QMainWindow):
         # webp を読み込んで Qt が画面表示できる画像データに変換する
         self.pixmap = QPixmap("nekochan.webp")
 
+        # 現在の表示上の回転角度
+        self.rotation_angle = 0
+
         # QMainWindow の中央コンテンツを image_label にする
         self.setCentralWidget(self.image_label)
 
         self.update_image()
     
     def update_image(self):
+        # QTransformで回転
+        transform = QTransform()
+        transform.rotate(self.rotation_angle)
+
+        # 回転後の画像
+        rotated_pixmap = self.pixmap.transformed(
+            transform,
+            Qt.SmoothTransformation,
+        )
+
         # 元画像のアスペクト比を維持しながらウィンドウ内に収める
-        scaled_pixmap = self.pixmap.scaled(
+        scaled_pixmap = rotated_pixmap.scaled(
             self.image_label.size(),
             Qt.KeepAspectRatio,
             Qt.SmoothTransformation,
@@ -53,6 +66,27 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         self.update_image()
         super().resizeEvent(event)
+    
+    # 左右に90度回転
+    def rotate_right(self):
+        # 0 -> 90 -> 180 -> 270 -> 0
+        self.rotation_angle = (self.rotation_angle + 90) % 360
+        self.update_image()
+
+    def rotate_left(self):
+        self.rotation_angle = (self.rotation_angle - 90) % 360
+        self.update_image()
+
+    # キー入力
+    def keyPressEvent(self, event):
+        # R: rotate_right(), Shift + R: rotate_left()
+        if event.key() == Qt.Key_R:
+            if event.modifiers() & Qt.ShiftModifier:
+                self.rotate_left()
+            else:
+                self.rotate_right()
+        else:
+            super().keyPressEvent(event)
 
 
 def main():
