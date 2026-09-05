@@ -99,12 +99,12 @@ class MainWindow(QMainWindow):
     # 拡大・縮小・縮尺リセット
     def zoom_in(self):
         self.is_fit_mode = False
-        self.zoom_factor += 0.1
+        self.zoom_factor += 0.2
         self.update_image()
 
     def zoom_out(self):
         self.is_fit_mode = False
-        self.zoom_factor = max(0.1, self.zoom_factor - 0.1)
+        self.zoom_factor = max(0.1, self.zoom_factor - 0.2)
         self.update_image()
 
     def fit_to_window(self):
@@ -132,6 +132,15 @@ class MainWindow(QMainWindow):
             self.fit_to_window()
         else:
             super().keyPressEvent(event)
+    
+    # マウスホイール操作
+    def wheelEvent(self, event):
+        # 上方向にスクロール: zoom_in()
+        # 下方向にスクロール: zoom_out()
+        if event.angleDelta().y() > 0:
+            self.zoom_in()
+        elif event.angleDelta().y() < 0:
+            self.zoom_out()
 
 
 def main():
