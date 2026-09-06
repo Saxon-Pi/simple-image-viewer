@@ -1,13 +1,24 @@
+"""
+QPixmap: 画像データそのもの
+
+QGraphicsScene: 画像などのオブジェクトが存在する仮想的な空間
+        ↓ その中に
+QGraphicsPixmapItem: Scene 上に存在する画像オブジェクト
+        ↓ その Scene を覗く
+QGraphicsView: ユーザーが実際に見る、Scene の一部分を画面に表示する窓
+"""
+
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QTransform
+from PySide6.QtGui import QPixmap
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
 from PySide6.QtWidgets import (
     QApplication,
-    QLabel,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsView,
     QMainWindow,
-    QSizePolicy,
 )
 
 
@@ -18,100 +29,105 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Simple Image Viewer")
         self.resize(800, 600)
 
-        self.image_label = QLabel()
+        self.rotation_angle = 0 # 現在の表示上の回転角度
+        self.is_fit_mode = True # Fitモード（画像全体をView内に収めて表示）のフラグ
+        self.zoom_factor = 1.0  # 画像の縮尺
 
-        # 画像サイズがウィンドウサイズを制約しないようにする
-        self.image_label.setMinimumSize(1, 1)
-        self.image_label.setSizePolicy(
-            QSizePolicy.Ignored,
-            QSizePolicy.Ignored,
-        )
+        # 画像を表示する Scene
+        self.scene = QGraphicsScene(self)
 
-        # 画像が表示領域より小さい場合、ウィンドウ中央に配置する
-        self.image_label.setAlignment(Qt.AlignCenter)
+        # Scene を表示する View
+        self.view = ImageView(self.scene)
 
-        # webp を読み込んで Qt が画面表示できる画像データに変換する
+        # 画像を読み込んで Qt が画面表示できる画像データに変換する
         self.pixmap = QPixmap("nekochan.webp")
 
-        # 現在の表示上の回転角度
-        self.rotation_angle = 0
+        # Pixmap を Scene 上に配置する Item に変換
+        self.image_item = QGraphicsPixmapItem(self.pixmap)
 
-        # QMainWindow の中央コンテンツを image_label にする
-        self.setCentralWidget(self.image_label)
+        # 画像の中心を回転軸にする
+        self.image_item.setTransformOriginPoint(
+            self.image_item.boundingRect().center()
+        )
 
-        # Fitモード (画像の元サイズで表示) のフラグ
+        # Scene に画像を追加
+        self.scene.addItem(self.image_item)
+
+        # QMainWindow の中央コンテンツを QGraphicsView にする
+        self.setCentralWidget(self.view)
+
+        # 初期表示はウィンドウに Fit
+        self.fit_to_window()
+    
+    # 画像の縮尺変更 (画像自体のサイズは変更せず、View側の倍率を変更する)
+    def fit_to_window(self):
         self.is_fit_mode = True
-        # 画像の縮尺
         self.zoom_factor = 1.0
 
-        self.update_image()
-    
-    def update_image(self):
-        # QTransformで回転
-        transform = QTransform()
-        transform.rotate(self.rotation_angle)
+        # Zoom すると QGraphicsView 内部に「1.2倍」のような Transform が残るため
+        # View の倍率を一度リセットする
+        self.view.resetTransform()
 
-        # 回転後の画像
-        rotated_pixmap = self.pixmap.transformed(
-            transform,
-            Qt.SmoothTransformation,
-        )
+        # 回転後の画像がScene上で占める領域を取得
+        image_rect = self.image_item.sceneBoundingRect()
 
-        # 元画像のアスペクト比を維持しながらウィンドウ内に収める
-        scaled_pixmap = rotated_pixmap.scaled(
-            self.image_label.size(),
+        # Sceneの範囲を回転後の画像に合わせる
+        self.scene.setSceneRect(image_rect)
+
+        # Scene全体がView内に収まるようにする
+        self.view.fitInView(
+            image_rect,
             Qt.KeepAspectRatio,
-            Qt.SmoothTransformation,
         )
-
-        # Zoomモードなら、このFitサイズを基準に倍率を掛ける
-        if self.is_fit_mode:
-            display_pixmap = scaled_pixmap
-        else:
-            zoom_width = int(scaled_pixmap.width() * self.zoom_factor)
-            zoom_height = int(scaled_pixmap.height() * self.zoom_factor)
-
-            display_pixmap = rotated_pixmap.scaled(
-                zoom_width,
-                zoom_height,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
-
-        # QLabel による画像表示
-        self.image_label.setPixmap(display_pixmap)
-
-    # ウィンドウサイズが変更されたときに Qt から自動的に呼ばれるメソッド
-    def resizeEvent(self, event):
-        self.update_image()
-        super().resizeEvent(event)
     
     # 左右に90度回転
     def rotate_right(self):
         # 0 -> 90 -> 180 -> 270 -> 0
         self.rotation_angle = (self.rotation_angle + 90) % 360
-        self.update_image()
+        # 画像は元のまま、QGraphicsPixmapItem を回転表示する
+        self.image_item.setRotation(self.rotation_angle)
+        # 回転後の Item全体が View に収まるよう再Fit
+        self.fit_to_window()
 
     def rotate_left(self):
         self.rotation_angle = (self.rotation_angle - 90) % 360
-        self.update_image()
+        self.image_item.setRotation(self.rotation_angle)
+        self.fit_to_window()
 
     # 拡大・縮小・縮尺リセット
     def zoom_in(self):
         self.is_fit_mode = False
         self.zoom_factor += 0.2
-        self.update_image()
+        self.apply_zoom()
 
     def zoom_out(self):
         self.is_fit_mode = False
         self.zoom_factor = max(0.1, self.zoom_factor - 0.2)
-        self.update_image()
+        self.apply_zoom()
+    
+    def apply_zoom(self):
+        # 現在の Fit表示を 100% の基準とする
+        self.view.resetTransform()
 
-    def fit_to_window(self):
-        self.is_fit_mode = True
-        self.zoom_factor = 1.0
-        self.update_image()
+        image_rect = self.image_item.sceneBoundingRect()
+        self.view.fitInView(
+            image_rect,
+            Qt.KeepAspectRatio,
+        )
 
+        # Fit表示を基準に Zoom倍率を掛ける
+        self.view.scale(
+            self.zoom_factor,
+            self.zoom_factor,
+        )
+        
+    # ウィンドウサイズが変更されたときに Qt から自動的に呼ばれるメソッド
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        if self.is_fit_mode:
+            self.fit_to_window()
+    
     # キー入力
     def keyPressEvent(self, event):
         # "R": rotate_right()
@@ -133,14 +149,19 @@ class MainWindow(QMainWindow):
         else:
             super().keyPressEvent(event)
     
-    # マウスホイール操作
+
+class ImageView(QGraphicsView):
     def wheelEvent(self, event):
+        # マウスホイール操作は Zoom専用にする
         # 上方向にスクロール: zoom_in()
         # 下方向にスクロール: zoom_out()
         if event.angleDelta().y() > 0:
-            self.zoom_in()
+            self.window().zoom_in()
         elif event.angleDelta().y() < 0:
-            self.zoom_out()
+            self.window().zoom_out()
+
+        # QGraphicsView 標準のスクロール処理には渡さない
+        event.accept()
 
 
 def main():
