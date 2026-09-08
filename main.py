@@ -39,8 +39,13 @@ class MainWindow(QMainWindow):
         # Scene を表示する View
         self.view = ImageView(self.scene)
 
+        # スクロールバーを出さない
+        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         # 画像を読み込んで Qt が画面表示できる画像データに変換する
         self.pixmap = QPixmap("nekochan.webp")
+        #self.pixmap = QPixmap("test_image_724-2172.png")
 
         # Pixmap を Scene 上に配置する Item に変換
         self.image_item = QGraphicsPixmapItem(self.pixmap)
@@ -56,8 +61,8 @@ class MainWindow(QMainWindow):
         # QMainWindow の中央コンテンツを QGraphicsView にする
         self.setCentralWidget(self.view)
 
-        # 初期表示はウィンドウに Fit
-        self.fit_to_window()
+        # 画像の初期表示
+        self.reset_to_initial_view()
     
     # 画像の縮尺変更 (画像自体のサイズは変更せず、View側の倍率を変更する)
     def fit_to_window(self):
@@ -94,16 +99,90 @@ class MainWindow(QMainWindow):
         self.image_item.setRotation(self.rotation_angle)
         self.fit_to_window()
 
+    # Zoom に合わせてウィンドウも伸縮
+    def resize_window_to_image(self):
+        # Scene上の画像サイズを取得
+        image_rect = self.image_item.sceneBoundingRect()
+
+        # 現在の View の Transform を考慮して、
+        # 画像が画面上で何px になるかを取得
+        display_rect = self.view.transform().mapRect(image_rect)
+
+        image_width = int(display_rect.width())
+        image_height = int(display_rect.height())
+
+        # QMainWindow全体と、実際にSceneを表示しているviewportとの差分
+        extra_width = self.width() - self.view.viewport().width()
+        extra_height = self.height() - self.view.viewport().height()
+
+        self.resize(
+            image_width + extra_width,
+            image_height + extra_height,
+        )
+    
+    # 画像の初期表示 (高解像度なら画面高さを上限に縮小表示)
+    def reset_to_initial_view(self):
+        self.zoom_factor = 1.0
+        self.view.resetTransform()
+
+        image_rect = self.image_item.sceneBoundingRect()
+
+        # Viewerが現在表示されているモニタを取得
+        screen = self.screen()
+        available_rect = screen.availableGeometry()
+
+        # debug
+        print("screen:", screen.name())
+        print(
+            "available:",
+            available_rect.width(),
+            available_rect.height(),
+        )
+
+        print(
+            "window:",
+            self.width(),
+            self.height(),
+        )
+
+        print(
+            "viewport:",
+            self.view.viewport().width(),
+            self.view.viewport().height(),
+        )
+
+        transform = self.view.transform()
+
+        print("scale X:", transform.m11())
+        print("scale Y:", transform.m22())
+        print("---")
+
+        image_height = image_rect.height()
+        max_height = available_rect.height()
+
+        if image_height > max_height:
+            scale_factor = max_height / image_height
+
+            self.view.scale(
+                scale_factor,
+                scale_factor,
+            )
+
+        self.scene.setSceneRect(image_rect)
+        self.resize_window_to_image()
+
     # 拡大・縮小・縮尺リセット
     def zoom_in(self):
         self.is_fit_mode = False
         self.zoom_factor += 0.2
         self.apply_zoom()
+        self.resize_window_to_image()
 
     def zoom_out(self):
         self.is_fit_mode = False
         self.zoom_factor = max(0.1, self.zoom_factor - 0.2)
         self.apply_zoom()
+        self.resize_window_to_image()
     
     def apply_zoom(self):
         # 現在の Fit表示を 100% の基準とする
@@ -120,13 +199,25 @@ class MainWindow(QMainWindow):
             self.zoom_factor,
             self.zoom_factor,
         )
-        
-    # ウィンドウサイズが変更されたときに Qt から自動的に呼ばれるメソッド
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
+    
+    # 画像を元の縮尺に戻す
+    def reset_to_original_size(self):
+        self.is_fit_mode = False
+        self.zoom_factor = 1.0
 
-        if self.is_fit_mode:
-            self.fit_to_window()
+        # View の Transform をリセット
+        self.view.resetTransform()
+
+        # 画像の表示領域を更新
+        image_rect = self.image_item.sceneBoundingRect()
+        self.scene.setSceneRect(image_rect)
+
+        # オリジナルサイズに合わせて Window も変更
+        self.resize_window_to_image()
+        
+    # # ウィンドウサイズが変更されたときに Qt から自動的に呼ばれるメソッド
+    # def resizeEvent(self, event):
+    #     super().resizeEvent(event)
     
     # キー入力
     def keyPressEvent(self, event):
@@ -139,18 +230,46 @@ class MainWindow(QMainWindow):
                 self.rotate_right()
         # "+" or "=": zoom_in()
         # "-": zoom_out()
-        # "0": fit_to_window()
+        # "0": reset_to_original_size()
         elif event.key() in (Qt.Key_Plus, Qt.Key_Equal):
             self.zoom_in()
         elif event.key() == Qt.Key_Minus:
             self.zoom_out()
         elif event.key() == Qt.Key_0:
-            self.fit_to_window()
+            self.reset_to_initial_view()
         else:
             super().keyPressEvent(event)
     
 
 class ImageView(QGraphicsView):
+    def __init__(self, scene):
+        super().__init__(scene)
+
+    # ウィンドウリサイズ時、現在の View中央が指している Scene上の位置を維持する    
+    def resizeEvent(self, event):
+        old_size = event.oldSize()
+
+        # 初回など oldSize が無効な場合は通常処理
+        if old_size.isValid():
+            # リサイズ前の View中央
+            old_center_view = old_size.width() / 2, old_size.height() / 2
+
+            # リサイズ前の中央が指していた Scene座標を保存
+            old_center_scene = self.mapToScene(
+                int(old_center_view[0]),
+                int(old_center_view[1]),
+            )
+
+        else:
+            old_center_scene = None
+
+        # 通常の QGraphicsView リサイズ処理
+        super().resizeEvent(event)
+
+        # リサイズ後も同じ Scene座標を中央にする
+        if old_center_scene is not None:
+            self.centerOn(old_center_scene)
+
     def wheelEvent(self, event):
         # マウスホイール操作は Zoom専用にする
         # 上方向にスクロール: zoom_in()
