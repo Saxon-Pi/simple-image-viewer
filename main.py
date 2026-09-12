@@ -10,7 +10,7 @@ QGraphicsView: ユーザーが実際に見る、Scene の一部分を画面に�
 
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
 from PySide6.QtWidgets import (
@@ -21,6 +21,11 @@ from PySide6.QtWidgets import (
     QMainWindow,
 )
 
+# モニタとウィンドウのマージン
+SCREEN_MARGIN_LEFT = 12
+SCREEN_MARGIN_RIGHT = 12
+SCREEN_MARGIN_BOTTOM = 36
+SCREEN_MARGIN_TOP = 0
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -60,26 +65,195 @@ class MainWindow(QMainWindow):
 
         # QMainWindow の中央コンテンツを QGraphicsView にする
         self.setCentralWidget(self.view)
+    
+    # このアプリが使える最大 Window領域を返す
+    def get_available_window_rect(self):
+        screen = self.screen()
+        rect = screen.availableGeometry()
 
-        # 画像の初期表示
-        self.reset_to_initial_view()
+        return rect.adjusted(
+            SCREEN_MARGIN_LEFT,
+            SCREEN_MARGIN_TOP,
+            -SCREEN_MARGIN_RIGHT,
+            -SCREEN_MARGIN_BOTTOM,
+        )
+
+    # スクリーンの中央にウィンドウを表示
+    def center_window_on_screen(self):
+        screen = self.screen()
+        available_rect = screen.availableGeometry()
+
+        frame = self.frameGeometry()
+        frame.moveCenter(available_rect.center())
+
+        self.move(frame.topLeft())
+    
+    # マージン有りの最大ウィンドウ（モニタ解像度からマージンを差し引く）
+    def expand_window_for_original_view(self):
+        screen = self.screen()
+        available_rect = screen.availableGeometry()
+
+        margin_left = 12
+        margin_right = 12
+        margin_bottom = 36
+
+        target_width = (
+            available_rect.width()
+            - margin_left
+            - margin_right
+        )
+
+        target_height = (
+            available_rect.height()
+            - margin_bottom
+        )
+
+        # 現在のWindow位置を保存
+        current_pos = self.pos()
+
+        # 最大サイズ制限を一旦解除
+        self.setMaximumSize(
+            16777215,
+            16777215,
+        )
+
+        # 位置を変えずサイズだけ拡大
+        self.resize(
+            target_width,
+            target_height,
+        )
+
+        # 画面外にはみ出した場合だけ位置を補正
+        new_x = min(
+            current_pos.x(),
+            available_rect.right() - target_width,
+        )
+
+        new_y = min(
+            current_pos.y(),
+            available_rect.bottom() - target_height,
+        )
+
+        new_x = max(new_x, available_rect.left() + margin_left)
+        new_y = max(new_y, available_rect.top())
+
+        self.move(new_x, new_y)
+    
+    # 現在の画像表示サイズをウィンドウの最大サイズにする（余白をなくす）
+    def update_window_size_limits(self):
+        image_rect = self.image_item.sceneBoundingRect()
+
+        display_rect = self.view.transform().mapRect(
+            image_rect
+        )
+
+        image_width = int(display_rect.width())
+        image_height = int(display_rect.height())
+
+        extra_width = (
+            self.width()
+            - self.view.viewport().width()
+        )
+
+        extra_height = (
+            self.height()
+            - self.view.viewport().height()
+        )
+
+        # 共通のウィンドウ利用可能領域
+        allowed_rect = (
+            self.get_available_window_rect()
+        )
+
+        max_width = min(
+            image_width + extra_width,
+            allowed_rect.width(),
+        )
+
+        max_height = min(
+            image_height + extra_height,
+            allowed_rect.height(),
+        )
+
+        self.setMaximumSize(
+            max_width,
+            max_height,
+        )
     
     # 左右に90度回転
     def rotate_right(self):
         # 0 -> 90 -> 180 -> 270 -> 0
         self.rotation_angle = (self.rotation_angle + 90) % 360
+
         # 画像は元のまま、QGraphicsPixmapItem を回転表示する
         self.image_item.setRotation(self.rotation_angle)
+
         # 回転後の Item全体が View に収まるよう再Fit
-        self.fit_to_window()
+        self.update_after_rotation()
 
     def rotate_left(self):
         self.rotation_angle = (self.rotation_angle - 90) % 360
+
         self.image_item.setRotation(self.rotation_angle)
-        self.fit_to_window()
+
+        self.update_after_rotation()
+    
+    # 回転後の画像の理想倍率を計算
+    # (横幅・高さの両方について、モニタの利用可能領域に収まる倍率を計算する)
+    def calculate_scale_to_screen(self, image_rect):
+        allowed_rect = self.get_available_window_rect()
+
+        width_scale = (
+            allowed_rect.width() / image_rect.width()
+        )
+
+        height_scale = (
+            allowed_rect.height() / image_rect.height()
+        )
+
+        # 縦横どちらもモニタ内に収まる最大倍率
+        return min(
+            width_scale,
+            height_scale,
+            1.0,
+        )
+    
+    def update_after_rotation(self):
+        image_rect = self.image_item.sceneBoundingRect()
+
+        # 回転後の画像領域へSceneを更新
+        self.scene.setSceneRect(image_rect)
+
+        # 回転後の画像がモニタ内に最大で収まる倍率を計算
+        self.current_scale = self.calculate_scale_to_screen(
+            image_rect
+        )
+
+        # 現在の倍率をそのまま適用
+        self.apply_scale()
+        # 回転後の画像サイズへWindowを追従
+        self.resize_window_to_image()
+
+        # ウィンドウ自体をモニタ中央へ
+        QTimer.singleShot(
+            0,
+            self.center_window_on_screen,
+        )
+
+        # 回転前に見ていた位置を回転後のView中央にする
+        QTimer.singleShot(
+            0,
+            lambda: self.view.centerOn(image_rect.center()),
+        )
 
     # Zoom に合わせてウィンドウも伸縮
     def resize_window_to_image(self):
+        # 以前のmaximumSizeを解除
+        self.setMaximumSize(
+            16777215,
+            16777215,
+        )
+
         # Scene上の画像サイズを取得
         image_rect = self.image_item.sceneBoundingRect()
 
@@ -87,24 +261,64 @@ class MainWindow(QMainWindow):
         # 画像が画面上で何px になるかを取得
         display_rect = self.view.transform().mapRect(image_rect)
 
-        image_width = int(display_rect.width())
-        image_height = int(display_rect.height())
+        extra_width = (
+            self.width()
+            - self.view.viewport().width()
+        )
 
-        # QMainWindow全体と、実際にSceneを表示しているviewportとの差分
-        extra_width = self.width() - self.view.viewport().width()
-        extra_height = self.height() - self.view.viewport().height()
+        extra_height = (
+            self.height()
+            - self.view.viewport().height()
+        )
+
+        desired_width = int(
+            display_rect.width()
+            + extra_width
+        )
+
+        desired_height = int(
+            display_rect.height()
+            + extra_height
+        )
+
+        allowed_rect = self.get_available_window_rect()
+
+        target_width = min(
+            desired_width,
+            allowed_rect.width(),
+        )
+
+        target_height = min(
+            desired_height,
+            allowed_rect.height(),
+        )
 
         self.resize(
-            image_width + extra_width,
-            image_height + extra_height,
+            target_width,
+            target_height,
         )
+
+        # image_width = int(display_rect.width())
+        # image_height = int(display_rect.height())
+
+        # # QMainWindow全体と、実際にSceneを表示しているviewportとの差分
+        # extra_width = self.width() - self.view.viewport().width()
+        # extra_height = self.height() - self.view.viewport().height()
+
+        # self.resize(
+        #     image_width + extra_width,
+        #     image_height + extra_height,
+        # )
+
+        # resize後のWindow状態を基準に制限を設定
+        self.update_window_size_limits()
     
     # 画像の初期表示 (高解像度なら画面高さを上限に縮小表示)
     def reset_to_initial_view(self):
         image_rect = self.image_item.sceneBoundingRect()
 
-        screen = self.screen()
-        available_rect = screen.availableGeometry()
+        # モニタ端のマージンを考慮した利用可能領域
+        available_rect = self.get_available_window_rect()
 
         # 画像の解像度が画面の解像度を超える場合、画面の高さを上限に縮小表示
         if image_rect.height() > available_rect.height():
@@ -117,13 +331,23 @@ class MainWindow(QMainWindow):
         self.current_scale = self.initial_scale
 
         self.scene.setSceneRect(image_rect)
+
         self.apply_scale()
         self.resize_window_to_image()
 
-        self.view.centerOn(image_rect.center())
+        QTimer.singleShot(
+            0,
+            lambda: self.view.centerOn(image_rect.center()),
+        )
+
+        QTimer.singleShot(
+            0,
+            self.center_window_on_screen,
+        )
     
     def apply_scale(self):
         self.view.resetTransform()
+
         self.view.scale(
             self.current_scale,
             self.current_scale,
@@ -155,13 +379,15 @@ class MainWindow(QMainWindow):
 
         # 100%表示へ
         self.current_scale = 1.0
+
         self.apply_scale()
+        self.resize_window_to_image()
 
-        # ウィンドウ最大化
-        self.showMaximized()
-
-        # クリックした画像位置を View中央へ
-        self.view.centerOn(scene_pos)
+        QTimer.singleShot(
+            0,
+            # クリックした画像位置を View中央へ
+            lambda: self.view.centerOn(scene_pos),
+        )
     
     # キー入力
     def keyPressEvent(self, event):
@@ -244,6 +470,12 @@ def main():
 
     window = MainWindow()
     window.show()
+
+    # Window表示後に初期画像サイズを計算する
+    QTimer.singleShot(
+        0,
+        window.reset_to_initial_view,
+    )
 
     # app.exec() でウィンドウを開いたままユーザー操作を待ち続けるイベントループを開始する
     # -> app.exec()でイベントループ開始 → ウィンドウを閉じる → app.exec()が終了 → sys.exit()でPythonプログラムを終了
