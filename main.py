@@ -415,6 +415,29 @@ class ImageView(QGraphicsView):
     def __init__(self, scene):
         super().__init__(scene)
 
+        self.is_panning = False
+        self.last_mouse_pos = None
+    
+    def restore_zoom_anchor(self, scene_pos_before, global_pos):
+        # ウィンドウサイズ変更後のマウスポインタ位置を View座標へ変換
+        view_pos_after = self.viewport().mapFromGlobal(global_pos)
+
+        # 現在その位置が指している Scene座標
+        scene_pos_after = self.mapToScene(view_pos_after)
+
+        # Zoom 前後で生じた Scene座標のズレ
+        delta = scene_pos_before - scene_pos_after
+
+        # 現在の View中央
+        current_center = self.mapToScene(
+            self.viewport().rect().center()
+        )
+
+        # ズレた分だけ View中央を補正
+        self.centerOn(
+            current_center + delta
+        )
+
     # ウィンドウリサイズ時、現在の View中央が指している Scene上の位置を維持する    
     def resizeEvent(self, event):
         old_size = event.oldSize()
@@ -444,14 +467,31 @@ class ImageView(QGraphicsView):
         # マウスホイール操作は Zoom専用にする
         # 上方向にスクロール: zoom_in()
         # 下方向にスクロール: zoom_out()
+
+        # Zoom前に、マウスポインタが指している Scene座標を保存
+        view_pos = event.position().toPoint()
+        scene_pos_before = self.mapToScene(view_pos)
+
+        # ウィンドウリサイズ後も同じ画面上のマウス位置を取得できるようにする
+        global_pos = event.globalPosition().toPoint()
+
         if event.angleDelta().y() > 0:
             self.window().zoom_in()
         elif event.angleDelta().y() < 0:
             self.window().zoom_out()
 
+        # resize処理完了後にポインタ位置を補正
+        QTimer.singleShot(
+            0,
+            lambda: self.restore_zoom_anchor(
+                scene_pos_before,
+                global_pos,
+            ),
+        )
+
         # QGraphicsView 標準のスクロール処理には渡さない
         event.accept()
-    
+
     def mousePressEvent(self, event):
         # マウスホイールクリック: toggle_original_scale()
         if event.button() == Qt.MiddleButton:
@@ -462,7 +502,48 @@ class ImageView(QGraphicsView):
             event.accept()
             return
 
+        # 右クリック開始時にパンモードに移行
+        if event.button() == Qt.RightButton:
+            self.is_panning = True
+            self.last_mouse_pos = event.position().toPoint()
+
+            event.accept()
+            return
+
         super().mousePressEvent(event)
+    
+    # 右クリック押下 + マウス移動中に Scene の表示位置をずらす
+    def mouseMoveEvent(self, event):
+        if self.is_panning and self.last_mouse_pos is not None:
+            current_pos = event.position().toPoint()
+
+            delta = current_pos - self.last_mouse_pos
+
+            self.horizontalScrollBar().setValue(
+                self.horizontalScrollBar().value() - delta.x()
+            )
+
+            self.verticalScrollBar().setValue(
+                self.verticalScrollBar().value() - delta.y()
+            )
+
+            self.last_mouse_pos = current_pos
+
+            event.accept()
+            return
+
+        super().mouseMoveEvent(event)
+    
+    # 右クリックを離すとパンモード終了
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.RightButton:
+            self.is_panning = False
+            self.last_mouse_pos = None
+
+            event.accept()
+            return
+
+        super().mouseReleaseEvent(event)
 
 
 def main():
