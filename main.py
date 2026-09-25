@@ -293,22 +293,53 @@ class MainWindow(QMainWindow):
             allowed_rect.height(),
         )
 
-        self.resize(
+        # 現在のウィンドウ中心
+        current_center = self.frameGeometry().center()
+
+        # まずは現在中心から左右均等に広げる
+        new_x = int(
+            current_center.x()
+            - target_width / 2
+        )
+
+        new_y = int(
+            current_center.y()
+            - target_height / 2
+        )
+
+        # 左右が画面外にはみ出さないよう補正
+        min_x = allowed_rect.left()
+        max_x = (
+            allowed_rect.right()
+            - target_width
+            + 1
+        )
+
+        new_x = max(
+            min_x,
+            min(new_x, max_x),
+        )
+
+        # 上下も同様に補正
+        min_y = allowed_rect.top()
+        max_y = (
+            allowed_rect.bottom()
+            - target_height
+            + 1
+        )
+
+        new_y = max(
+            min_y,
+            min(new_y, max_y),
+        )
+
+        # サイズと位置を同時に変更
+        self.setGeometry(
+            new_x,
+            new_y,
             target_width,
             target_height,
         )
-
-        # image_width = int(display_rect.width())
-        # image_height = int(display_rect.height())
-
-        # # QMainWindow全体と、実際にSceneを表示しているviewportとの差分
-        # extra_width = self.width() - self.view.viewport().width()
-        # extra_height = self.height() - self.view.viewport().height()
-
-        # self.resize(
-        #     image_width + extra_width,
-        #     image_height + extra_height,
-        # )
 
         # resize後のWindow状態を基準に制限を設定
         self.update_window_size_limits()
