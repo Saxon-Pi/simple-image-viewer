@@ -124,6 +124,27 @@ class MainWindow(QMainWindow):
         # 初期表示状態へ戻す
         self.reset_to_initial_view()
     
+    # 画像を切り替える (←→ で前後移動、ループなし)
+    def show_next_image(self):
+        if self.current_index >= len(self.image_paths) - 1:
+            return
+
+        self.current_index += 1
+
+        self.load_image(
+            self.image_paths[self.current_index]
+        )
+
+    def show_previous_image(self):
+        if self.current_index <= 0:
+            return
+
+        self.current_index -= 1
+
+        self.load_image(
+            self.image_paths[self.current_index]
+        )
+        
     # このアプリが使える最大 Window領域を返す
     def get_available_window_rect(self):
         screen = self.screen()
@@ -496,6 +517,12 @@ class MainWindow(QMainWindow):
             self.zoom_out()
         elif event.key() == Qt.Key_0:
             self.reset_to_initial_view()
+        # "→" : show_next_image()
+        # "←" : show_previous_image()
+        elif event.key() == Qt.Key_Right:
+            self.show_next_image()
+        elif event.key() == Qt.Key_Left:
+            self.show_previous_image()
         else:
             super().keyPressEvent(event)
     
