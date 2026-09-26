@@ -9,6 +9,7 @@ QGraphicsView: ユーザーが実際に見る、Scene の一部分を画面に�
 """
 
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap
@@ -26,6 +27,16 @@ SCREEN_MARGIN_LEFT = 12
 SCREEN_MARGIN_RIGHT = 12
 SCREEN_MARGIN_BOTTOM = 36
 SCREEN_MARGIN_TOP = 0
+
+# 対応する画像拡張子
+SUPPORTED_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".bmp",
+    ".gif",
+}
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -65,6 +76,23 @@ class MainWindow(QMainWindow):
 
         # QMainWindow の中央コンテンツを QGraphicsView にする
         self.setCentralWidget(self.view)
+    
+    # 同一ディレクトリの画像一覧を取得する
+    def load_image_list(self, image_path):
+        image_path = Path(image_path)
+
+        self.image_paths = sorted(
+            [
+                path
+                for path in image_path.parent.iterdir()
+                if path.is_file()
+                and path.suffix.lower() in SUPPORTED_EXTENSIONS
+            ]
+        )
+
+        self.current_index = self.image_paths.index(
+            image_path
+        )
     
     # このアプリが使える最大 Window領域を返す
     def get_available_window_rect(self):
