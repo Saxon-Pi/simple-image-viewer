@@ -55,6 +55,9 @@ class MainWindow(QMainWindow):
         # Scene を表示する View
         self.view = ImageView(self.scene)
 
+        # キーボード入力は MainWindow 側で処理する
+        self.view.setFocusPolicy(Qt.NoFocus)
+
         # スクロールバーを出さない
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -67,6 +70,7 @@ class MainWindow(QMainWindow):
         self.pixmap = QPixmap(
             str(initial_image_path)
         )
+        self.current_image_path = initial_image_path
 
         # Pixmap を Scene 上に配置する Item に変換
         self.image_item = QGraphicsPixmapItem(self.pixmap)
@@ -81,6 +85,9 @@ class MainWindow(QMainWindow):
 
         # QMainWindow の中央コンテンツを QGraphicsView にする
         self.setCentralWidget(self.view)
+
+        # 同一ディレクトリの画像一覧を取得
+        self.load_image_list(initial_image_path)
     
     # 同一ディレクトリの画像一覧を取得する
     def load_image_list(self, image_path):
@@ -95,11 +102,13 @@ class MainWindow(QMainWindow):
             ]
         )
 
+        print(self.image_paths)
+
         self.current_index = self.image_paths.index(
             image_path
         )
     
-    #  初期表示 & 切り替え時に画像を読み込む
+    #  キー操作での切り替え時の画像読み込み
     def load_image(self, image_path):
         self.current_image_path = Path(image_path)
 
@@ -501,6 +510,7 @@ class MainWindow(QMainWindow):
     
     # キー入力
     def keyPressEvent(self, event):
+        print("MainWindow key:", event.key())
         # "R": rotate_right()
         # "Shift + R": rotate_left()
         if event.key() == Qt.Key_R:
