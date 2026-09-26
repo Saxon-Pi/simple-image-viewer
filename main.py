@@ -9,6 +9,7 @@ QGraphicsView: ユーザーが実際に見る、Scene の一部分を画面に�
 """
 
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap
@@ -27,6 +28,16 @@ SCREEN_MARGIN_RIGHT = 12
 SCREEN_MARGIN_BOTTOM = 36
 SCREEN_MARGIN_TOP = 0
 
+# 対応する画像拡張子
+SUPPORTED_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".bmp",
+    ".gif",
+}
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -44,13 +55,22 @@ class MainWindow(QMainWindow):
         # Scene を表示する View
         self.view = ImageView(self.scene)
 
+        # キーボード入力は MainWindow 側で処理する
+        self.view.setFocusPolicy(Qt.NoFocus)
+
         # スクロールバーを出さない
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         # 画像を読み込んで Qt が画面表示できる画像データに変換する
         #self.pixmap = QPixmap("nekochan.webp")
-        self.pixmap = QPixmap("test_image_724-2172.png")
+        initial_image_path = Path(
+            "test_image_724-2172.png"
+        )
+        self.pixmap = QPixmap(
+            str(initial_image_path)
+        )
+        self.current_image_path = initial_image_path
 
         # Pixmap を Scene 上に配置する Item に変換
         self.image_item = QGraphicsPixmapItem(self.pixmap)
@@ -65,7 +85,75 @@ class MainWindow(QMainWindow):
 
         # QMainWindow の中央コンテンツを QGraphicsView にする
         self.setCentralWidget(self.view)
+
+        # 同一ディレクトリの画像一覧を取得
+        self.load_image_list(initial_image_path)
     
+    # 同一ディレクトリの画像一覧を取得する
+    def load_image_list(self, image_path):
+        image_path = Path(image_path)
+
+        self.image_paths = sorted(
+            [
+                path
+                for path in image_path.parent.iterdir()
+                if path.is_file()
+                and path.suffix.lower() in SUPPORTED_EXTENSIONS
+            ]
+        )
+
+        print(self.image_paths)
+
+        self.current_index = self.image_paths.index(
+            image_path
+        )
+    
+    #  キー操作での切り替え時の画像読み込み
+    def load_image(self, image_path):
+        self.current_image_path = Path(image_path)
+
+        self.pixmap = QPixmap(
+            str(self.current_image_path)
+        )
+
+        # QGraphicsPixmapItem 自体は作り直さず、中身の Pixmap だけ入れ替える
+        self.image_item.setPixmap(
+            self.pixmap
+        )
+
+        # 新しい画像の中心を回転軸にする
+        self.image_item.setTransformOriginPoint(
+            self.image_item.boundingRect().center()
+        )
+
+        # 画像切り替え時は回転をリセット
+        self.rotation_angle = 0
+        self.image_item.setRotation(0)
+
+        # 初期表示状態へ戻す
+        self.reset_to_initial_view()
+    
+    # 画像を切り替える (←→ で前後移動、ループなし)
+    def show_next_image(self):
+        if self.current_index >= len(self.image_paths) - 1:
+            return
+
+        self.current_index += 1
+
+        self.load_image(
+            self.image_paths[self.current_index]
+        )
+
+    def show_previous_image(self):
+        if self.current_index <= 0:
+            return
+
+        self.current_index -= 1
+
+        self.load_image(
+            self.image_paths[self.current_index]
+        )
+        
     # このアプリが使える最大 Window領域を返す
     def get_available_window_rect(self):
         screen = self.screen()
@@ -422,6 +510,7 @@ class MainWindow(QMainWindow):
     
     # キー入力
     def keyPressEvent(self, event):
+        print("MainWindow key:", event.key())
         # "R": rotate_right()
         # "Shift + R": rotate_left()
         if event.key() == Qt.Key_R:
@@ -438,6 +527,12 @@ class MainWindow(QMainWindow):
             self.zoom_out()
         elif event.key() == Qt.Key_0:
             self.reset_to_initial_view()
+        # "→" : show_next_image()
+        # "←" : show_previous_image()
+        elif event.key() == Qt.Key_Right:
+            self.show_next_image()
+        elif event.key() == Qt.Key_Left:
+            self.show_previous_image()
         else:
             super().keyPressEvent(event)
     
