@@ -61,7 +61,12 @@ class MainWindow(QMainWindow):
 
         # 画像を読み込んで Qt が画面表示できる画像データに変換する
         #self.pixmap = QPixmap("nekochan.webp")
-        self.pixmap = QPixmap("test_image_724-2172.png")
+        initial_image_path = Path(
+            "test_image_724-2172.png"
+        )
+        self.pixmap = QPixmap(
+            str(initial_image_path)
+        )
 
         # Pixmap を Scene 上に配置する Item に変換
         self.image_item = QGraphicsPixmapItem(self.pixmap)
@@ -93,6 +98,31 @@ class MainWindow(QMainWindow):
         self.current_index = self.image_paths.index(
             image_path
         )
+    
+    #  初期表示 & 切り替え時に画像を読み込む
+    def load_image(self, image_path):
+        self.current_image_path = Path(image_path)
+
+        self.pixmap = QPixmap(
+            str(self.current_image_path)
+        )
+
+        # QGraphicsPixmapItem 自体は作り直さず、中身の Pixmap だけ入れ替える
+        self.image_item.setPixmap(
+            self.pixmap
+        )
+
+        # 新しい画像の中心を回転軸にする
+        self.image_item.setTransformOriginPoint(
+            self.image_item.boundingRect().center()
+        )
+
+        # 画像切り替え時は回転をリセット
+        self.rotation_angle = 0
+        self.image_item.setRotation(0)
+
+        # 初期表示状態へ戻す
+        self.reset_to_initial_view()
     
     # このアプリが使える最大 Window領域を返す
     def get_available_window_rect(self):
