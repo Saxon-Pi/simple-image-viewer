@@ -39,8 +39,17 @@ SUPPORTED_EXTENSIONS = {
 }
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, initial_image_path):
         super().__init__()
+
+        # 入力チェック
+        if not initial_image_path.exists():
+            print(f"File not found: {initial_image_path}")
+            sys.exit(1)
+
+        if initial_image_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            print(f"Unsupported image format: {initial_image_path.suffix}")
+            sys.exit(1)
 
         self.setWindowTitle("Simple Image Viewer")
         self.resize(800, 600)
@@ -63,10 +72,6 @@ class MainWindow(QMainWindow):
         self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         # 画像を読み込んで Qt が画面表示できる画像データに変換する
-        #self.pixmap = QPixmap("nekochan.webp")
-        initial_image_path = Path(
-            "test_image_724-2172.png"
-        )
         self.pixmap = QPixmap(
             str(initial_image_path)
         )
@@ -675,7 +680,13 @@ class ImageView(QGraphicsView):
 def main():
     app = QApplication(sys.argv)
 
-    window = MainWindow()
+    if len(sys.argv) < 2:
+        print("Usage: python main.py <image_path>")
+        sys.exit(1)
+
+    initial_image_path = Path(sys.argv[1])
+
+    window = MainWindow(initial_image_path)
     window.show()
 
     # Window表示後に初期画像サイズを計算する
