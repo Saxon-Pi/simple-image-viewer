@@ -9,3 +9,7 @@ myworks
 .venv/
 __pycache__/
 *.pyc
+
+# PyInstaller
+build/
+dist/
