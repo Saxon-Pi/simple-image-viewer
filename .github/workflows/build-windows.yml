@@ -3,6 +3,10 @@ name: Build Windows App
 on:
   workflow_dispatch:
 
+  push:
+    branches:
+      - feature/11-windows-build-ci
+
 jobs:
   build-windows:
     runs-on: windows-latest
