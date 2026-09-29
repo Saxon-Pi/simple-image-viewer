@@ -172,32 +172,6 @@ class MainWindow(QMainWindow):
         self.load_image(
             self.image_paths[self.current_index]
         )
-    
-    # 縮小時だけ、表示サイズに合わせた高品質 Pixmap を事前生成する
-    def update_display_pixmap(self):
-        # 100%以上なら元画像をそのまま使う
-        if self.current_scale >= 1.0:
-            self.image_item.setPixmap(self.pixmap)
-            return
-
-        target_width = max(
-            1,
-            int(self.pixmap.width() * self.current_scale),
-        )
-
-        target_height = max(
-            1,
-            int(self.pixmap.height() * self.current_scale),
-        )
-
-        scaled_pixmap = self.pixmap.scaled(
-            target_width,
-            target_height,
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation,
-        )
-
-        self.image_item.setPixmap(scaled_pixmap)
         
     # このアプリが使える最大 Window領域を返す
     def get_available_window_rect(self):
@@ -479,35 +453,29 @@ class MainWindow(QMainWindow):
     
     # 画像の初期表示 (高解像度なら画面高さを上限に縮小表示)
     def reset_to_initial_view(self):
+        image_rect = self.image_item.sceneBoundingRect()
+
         # モニタ端のマージンを考慮した利用可能領域
         available_rect = self.get_available_window_rect()
 
-        original_height = self.pixmap.height()
-
         # 画像の解像度が画面の解像度を超える場合、画面の高さを上限に縮小表示
-        if original_height > available_rect.height():
+        if image_rect.height() > available_rect.height():
             self.initial_scale = (
-                available_rect.height()
-                / original_height
+                available_rect.height() / image_rect.height()
             )
         else:
             self.initial_scale = 1.0
 
         self.current_scale = self.initial_scale
 
-        # ここで縮小Pixmapを生成
+        self.scene.setSceneRect(image_rect)
+
         self.apply_scale()
-
-        # apply_scale後の画像サイズを取得
-        image_rect = self.image_item.sceneBoundingRect()
-
         self.resize_window_to_image()
 
         QTimer.singleShot(
             0,
-            lambda: self.view.centerOn(
-                image_rect.center()
-            ),
+            lambda: self.view.centerOn(image_rect.center()),
         )
 
         QTimer.singleShot(
@@ -518,59 +486,9 @@ class MainWindow(QMainWindow):
     def apply_scale(self):
         self.view.resetTransform()
 
-        if self.current_scale < 1.0:
-            target_width = max(
-                1,
-                round(self.pixmap.width() * self.current_scale),
-            )
-
-            target_height = max(
-                1,
-                round(self.pixmap.height() * self.current_scale),
-            )
-
-            scaled_pixmap = self.pixmap.scaled(
-                target_width,
-                target_height,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
-
-            self.image_item.setPixmap(
-                scaled_pixmap
-            )
-
-            # Pixmap サイズが変わったので回転中心も再設定
-            self.image_item.setTransformOriginPoint(
-                self.image_item.boundingRect().center()
-            )
-
-            # Pixmap 自体が縮小済みなので View 倍率は1.0
-            self.view.scale(
-                1.0,
-                1.0,
-            )
-
-        else:
-            # 100%以上では元画像を使用
-            self.image_item.setPixmap(
-                self.pixmap
-            )
-
-            self.image_item.setTransformOriginPoint(
-                self.image_item.boundingRect().center()
-            )
-
-            self.view.scale(
-                self.current_scale,
-                self.current_scale,
-            )
-
-        # Pixmap 変更後の実際の画像領域に Scene を合わせる
-        image_rect = self.image_item.sceneBoundingRect()
-
-        self.scene.setSceneRect(
-            image_rect
+        self.view.scale(
+            self.current_scale,
+            self.current_scale,
         )
 
     # 拡大・縮小・縮尺リセット
