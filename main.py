@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPainter, QPixmap
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
 from PySide6.QtWidgets import (
     QApplication,
@@ -63,6 +63,12 @@ class MainWindow(QMainWindow):
 
         # Scene を表示する View
         self.view = ImageView(self.scene)
+
+        # 画像の拡大・縮小時に高品質な補間を使用
+        self.view.setRenderHint(
+            QPainter.SmoothPixmapTransform,
+            True,
+        )
 
         # キーボード入力は MainWindow 側で処理する
         self.view.setFocusPolicy(Qt.NoFocus)
