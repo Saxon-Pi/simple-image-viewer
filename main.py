@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPainter, QPixmap
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
 from PySide6.QtWidgets import (
     QApplication,
@@ -64,6 +64,12 @@ class MainWindow(QMainWindow):
         # Scene を表示する View
         self.view = ImageView(self.scene)
 
+        # 画像の拡大・縮小時に高品質な補間を使用
+        self.view.setRenderHint(
+            QPainter.SmoothPixmapTransform,
+            True,
+        )
+
         # キーボード入力は MainWindow 側で処理する
         self.view.setFocusPolicy(Qt.NoFocus)
 
@@ -79,6 +85,11 @@ class MainWindow(QMainWindow):
 
         # Pixmap を Scene 上に配置する Item に変換
         self.image_item = QGraphicsPixmapItem(self.pixmap)
+
+        # 拡大・縮小時に高品質な補間を使用
+        self.image_item.setTransformationMode(
+            Qt.SmoothTransformation
+        )
 
         # 画像の中心を回転軸にする
         self.image_item.setTransformOriginPoint(
@@ -293,18 +304,31 @@ class MainWindow(QMainWindow):
     
     # 回転後の画像の理想倍率を計算
     # (横幅・高さの両方について、モニタの利用可能領域に収まる倍率を計算する)
-    def calculate_scale_to_screen(self, image_rect):
+    def calculate_scale_to_screen(self):
         allowed_rect = self.get_available_window_rect()
 
+        # 元画像のサイズ
+        original_width = self.pixmap.width()
+        original_height = self.pixmap.height()
+
+        # 90度 / 270度回転時は縦横が入れ替わる
+        if self.rotation_angle % 180 == 90:
+            rotated_width = original_height
+            rotated_height = original_width
+        else:
+            rotated_width = original_width
+            rotated_height = original_height
+
         width_scale = (
-            allowed_rect.width() / image_rect.width()
+            allowed_rect.width() / rotated_width
         )
 
         height_scale = (
-            allowed_rect.height() / image_rect.height()
+            allowed_rect.height() / rotated_height
         )
 
-        # 縦横どちらもモニタ内に収まる最大倍率
+        # モニタ内に収まる最大倍率
+        # 小さい画像は100%以上には拡大しない
         return min(
             width_scale,
             height_scale,
@@ -312,31 +336,32 @@ class MainWindow(QMainWindow):
         )
     
     def update_after_rotation(self):
+        # 回転後の元画像サイズを基準に
+        # モニタ内へ最大限収まる倍率を計算
+        self.initial_scale = self.calculate_scale_to_screen()
+        self.current_scale = self.initial_scale
+
+        # 高品質な縮小Pixmapを生成
+        self.apply_scale()
+
+        # apply_scale後の実際の表示領域
         image_rect = self.image_item.sceneBoundingRect()
 
-        # 回転後の画像領域へSceneを更新
-        self.scene.setSceneRect(image_rect)
-
-        # 回転後の画像がモニタ内に最大で収まる倍率を計算
-        self.current_scale = self.calculate_scale_to_screen(
-            image_rect
-        )
-
-        # 現在の倍率をそのまま適用
-        self.apply_scale()
         # 回転後の画像サイズへWindowを追従
         self.resize_window_to_image()
 
-        # ウィンドウ自体をモニタ中央へ
+        # Windowをモニタ中央へ
         QTimer.singleShot(
             0,
             self.center_window_on_screen,
         )
 
-        # 回転前に見ていた位置を回転後のView中央にする
+        # 画像中央をView中央へ
         QTimer.singleShot(
             0,
-            lambda: self.view.centerOn(image_rect.center()),
+            lambda: self.view.centerOn(
+                image_rect.center()
+            ),
         )
 
     # Zoom に合わせてウィンドウも伸縮
@@ -439,29 +464,23 @@ class MainWindow(QMainWindow):
     
     # 画像の初期表示 (高解像度なら画面高さを上限に縮小表示)
     def reset_to_initial_view(self):
-        image_rect = self.image_item.sceneBoundingRect()
-
-        # モニタ端のマージンを考慮した利用可能領域
-        available_rect = self.get_available_window_rect()
-
-        # 画像の解像度が画面の解像度を超える場合、画面の高さを上限に縮小表示
-        if image_rect.height() > available_rect.height():
-            self.initial_scale = (
-                available_rect.height() / image_rect.height()
-            )
-        else:
-            self.initial_scale = 1.0
-
+        # 現在の回転状態を考慮して Fit 倍率を計算
+        self.initial_scale = self.calculate_scale_to_screen()
         self.current_scale = self.initial_scale
 
-        self.scene.setSceneRect(image_rect)
-
+        # ここで縮小 Pixmap を生成
         self.apply_scale()
+
+        # apply_scale 後の画像サイズを取得
+        image_rect = self.image_item.sceneBoundingRect()
+
         self.resize_window_to_image()
 
         QTimer.singleShot(
             0,
-            lambda: self.view.centerOn(image_rect.center()),
+            lambda: self.view.centerOn(
+                image_rect.center()
+            ),
         )
 
         QTimer.singleShot(
@@ -472,9 +491,76 @@ class MainWindow(QMainWindow):
     def apply_scale(self):
         self.view.resetTransform()
 
-        self.view.scale(
-            self.current_scale,
-            self.current_scale,
+        # 縮小時は HiDPI を考慮した高解像度 Pixmap を事前生成する
+        # View 側だけで縮小すると細線や文字がぼやけるため、
+        # 物理解像度(DPR)分の画素数を確保してから表示する
+        if self.current_scale < 1.0:
+            logical_width = max(
+                1,
+                round(self.pixmap.width() * self.current_scale),
+            )
+
+            logical_height = max(
+                1,
+                round(self.pixmap.height() * self.current_scale),
+            )
+
+            # Retina / Windows DPI scaling を考慮
+            dpr = self.devicePixelRatioF()
+
+            physical_width = max(
+                1,
+                round(logical_width * dpr),
+            )
+
+            physical_height = max(
+                1,
+                round(logical_height * dpr),
+            )
+
+            scaled_pixmap = self.pixmap.scaled(
+                physical_width,
+                physical_height,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
+
+            # Pixmapの物理解像度と論理サイズを対応させる
+            scaled_pixmap.setDevicePixelRatio(dpr)
+
+            self.image_item.setPixmap(
+                scaled_pixmap
+            )
+
+            self.image_item.setTransformOriginPoint(
+                self.image_item.boundingRect().center()
+            )
+
+            self.view.scale(
+                1.0,
+                1.0,
+            )
+
+        else:
+            # 100%以上では元画像を使用
+            self.image_item.setPixmap(
+                self.pixmap
+            )
+
+            self.image_item.setTransformOriginPoint(
+                self.image_item.boundingRect().center()
+            )
+
+            self.view.scale(
+                self.current_scale,
+                self.current_scale,
+            )
+
+        # Pixmap 変更後の実際の画像領域に Scene を合わせる
+        image_rect = self.image_item.sceneBoundingRect()
+
+        self.scene.setSceneRect(
+            image_rect
         )
 
     # 拡大・縮小・縮尺リセット
