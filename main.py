@@ -169,32 +169,6 @@ class MainWindow(QMainWindow):
         self.load_image(
             self.image_paths[self.current_index]
         )
-    
-    # 縮小時だけ、表示サイズに合わせた高品質 Pixmap を事前生成する
-    def update_display_pixmap(self):
-        # 100%以上なら元画像をそのまま使う
-        if self.current_scale >= 1.0:
-            self.image_item.setPixmap(self.pixmap)
-            return
-
-        target_width = max(
-            1,
-            int(self.pixmap.width() * self.current_scale),
-        )
-
-        target_height = max(
-            1,
-            int(self.pixmap.height() * self.current_scale),
-        )
-
-        scaled_pixmap = self.pixmap.scaled(
-            target_width,
-            target_height,
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation,
-        )
-
-        self.image_item.setPixmap(scaled_pixmap)
         
     # このアプリが使える最大 Window領域を返す
     def get_available_window_rect(self):
@@ -517,34 +491,51 @@ class MainWindow(QMainWindow):
     def apply_scale(self):
         self.view.resetTransform()
 
+        # 縮小時は HiDPI を考慮した高解像度 Pixmap を事前生成する
+        # View 側だけで縮小すると細線や文字がぼやけるため、
+        # 物理解像度(DPR)分の画素数を確保してから表示する
         if self.current_scale < 1.0:
-            target_width = max(
+            logical_width = max(
                 1,
                 round(self.pixmap.width() * self.current_scale),
             )
 
-            target_height = max(
+            logical_height = max(
                 1,
                 round(self.pixmap.height() * self.current_scale),
             )
 
+            # Retina / Windows DPI scaling を考慮
+            dpr = self.devicePixelRatioF()
+
+            physical_width = max(
+                1,
+                round(logical_width * dpr),
+            )
+
+            physical_height = max(
+                1,
+                round(logical_height * dpr),
+            )
+
             scaled_pixmap = self.pixmap.scaled(
-                target_width,
-                target_height,
+                physical_width,
+                physical_height,
                 Qt.KeepAspectRatio,
                 Qt.SmoothTransformation,
             )
+
+            # Pixmapの物理解像度と論理サイズを対応させる
+            scaled_pixmap.setDevicePixelRatio(dpr)
 
             self.image_item.setPixmap(
                 scaled_pixmap
             )
 
-            # Pixmap サイズが変わったので回転中心も再設定
             self.image_item.setTransformOriginPoint(
                 self.image_item.boundingRect().center()
             )
 
-            # Pixmap 自体が縮小済みなので View 倍率は1.0
             self.view.scale(
                 1.0,
                 1.0,
