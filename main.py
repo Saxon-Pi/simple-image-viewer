@@ -91,9 +91,6 @@ class MainWindow(QMainWindow):
             Qt.SmoothTransformation
         )
 
-        # Pixmap を Scene 上に配置する Item に変換
-        self.image_item = QGraphicsPixmapItem(self.pixmap)
-
         # 画像の中心を回転軸にする
         self.image_item.setTransformOriginPoint(
             self.image_item.boundingRect().center()
@@ -333,18 +330,31 @@ class MainWindow(QMainWindow):
     
     # 回転後の画像の理想倍率を計算
     # (横幅・高さの両方について、モニタの利用可能領域に収まる倍率を計算する)
-    def calculate_scale_to_screen(self, image_rect):
+    def calculate_scale_to_screen(self):
         allowed_rect = self.get_available_window_rect()
 
+        # 元画像のサイズ
+        original_width = self.pixmap.width()
+        original_height = self.pixmap.height()
+
+        # 90度 / 270度回転時は縦横が入れ替わる
+        if self.rotation_angle % 180 == 90:
+            rotated_width = original_height
+            rotated_height = original_width
+        else:
+            rotated_width = original_width
+            rotated_height = original_height
+
         width_scale = (
-            allowed_rect.width() / image_rect.width()
+            allowed_rect.width() / rotated_width
         )
 
         height_scale = (
-            allowed_rect.height() / image_rect.height()
+            allowed_rect.height() / rotated_height
         )
 
-        # 縦横どちらもモニタ内に収まる最大倍率
+        # モニタ内に収まる最大倍率
+        # 小さい画像は100%以上には拡大しない
         return min(
             width_scale,
             height_scale,
@@ -352,31 +362,32 @@ class MainWindow(QMainWindow):
         )
     
     def update_after_rotation(self):
+        # 回転後の元画像サイズを基準に
+        # モニタ内へ最大限収まる倍率を計算
+        self.initial_scale = self.calculate_scale_to_screen()
+        self.current_scale = self.initial_scale
+
+        # 高品質な縮小Pixmapを生成
+        self.apply_scale()
+
+        # apply_scale後の実際の表示領域
         image_rect = self.image_item.sceneBoundingRect()
 
-        # 回転後の画像領域へSceneを更新
-        self.scene.setSceneRect(image_rect)
-
-        # 回転後の画像がモニタ内に最大で収まる倍率を計算
-        self.current_scale = self.calculate_scale_to_screen(
-            image_rect
-        )
-
-        # 現在の倍率をそのまま適用
-        self.apply_scale()
         # 回転後の画像サイズへWindowを追従
         self.resize_window_to_image()
 
-        # ウィンドウ自体をモニタ中央へ
+        # Windowをモニタ中央へ
         QTimer.singleShot(
             0,
             self.center_window_on_screen,
         )
 
-        # 回転前に見ていた位置を回転後のView中央にする
+        # 画像中央をView中央へ
         QTimer.singleShot(
             0,
-            lambda: self.view.centerOn(image_rect.center()),
+            lambda: self.view.centerOn(
+                image_rect.center()
+            ),
         )
 
     # Zoom に合わせてウィンドウも伸縮
@@ -479,26 +490,14 @@ class MainWindow(QMainWindow):
     
     # 画像の初期表示 (高解像度なら画面高さを上限に縮小表示)
     def reset_to_initial_view(self):
-        # モニタ端のマージンを考慮した利用可能領域
-        available_rect = self.get_available_window_rect()
-
-        original_height = self.pixmap.height()
-
-        # 画像の解像度が画面の解像度を超える場合、画面の高さを上限に縮小表示
-        if original_height > available_rect.height():
-            self.initial_scale = (
-                available_rect.height()
-                / original_height
-            )
-        else:
-            self.initial_scale = 1.0
-
+        # 現在の回転状態を考慮して Fit 倍率を計算
+        self.initial_scale = self.calculate_scale_to_screen()
         self.current_scale = self.initial_scale
 
-        # ここで縮小Pixmapを生成
+        # ここで縮小 Pixmap を生成
         self.apply_scale()
 
-        # apply_scale後の画像サイズを取得
+        # apply_scale 後の画像サイズを取得
         image_rect = self.image_item.sceneBoundingRect()
 
         self.resize_window_to_image()
