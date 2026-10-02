@@ -181,67 +181,6 @@ class MainWindow(QMainWindow):
             -SCREEN_MARGIN_RIGHT,
             -SCREEN_MARGIN_BOTTOM,
         )
-
-    # スクリーンの中央にウィンドウを表示
-    def center_window_on_screen(self):
-        screen = self.screen()
-        available_rect = screen.availableGeometry()
-
-        frame = self.frameGeometry()
-        frame.moveCenter(available_rect.center())
-
-        self.move(frame.topLeft())
-    
-    # マージン有りの最大ウィンドウ（モニタ解像度からマージンを差し引く）
-    def expand_window_for_original_view(self):
-        screen = self.screen()
-        available_rect = screen.availableGeometry()
-
-        margin_left = 12
-        margin_right = 12
-        margin_bottom = 36
-
-        target_width = (
-            available_rect.width()
-            - margin_left
-            - margin_right
-        )
-
-        target_height = (
-            available_rect.height()
-            - margin_bottom
-        )
-
-        # 現在のWindow位置を保存
-        current_pos = self.pos()
-
-        # 最大サイズ制限を一旦解除
-        self.setMaximumSize(
-            16777215,
-            16777215,
-        )
-
-        # 位置を変えずサイズだけ拡大
-        self.resize(
-            target_width,
-            target_height,
-        )
-
-        # 画面外にはみ出した場合だけ位置を補正
-        new_x = min(
-            current_pos.x(),
-            available_rect.right() - target_width,
-        )
-
-        new_y = min(
-            current_pos.y(),
-            available_rect.bottom() - target_height,
-        )
-
-        new_x = max(new_x, available_rect.left() + margin_left)
-        new_y = max(new_y, available_rect.top())
-
-        self.move(new_x, new_y)
     
     # 現在の画像表示サイズをウィンドウの最大サイズにする（余白をなくす）
     def update_window_size_limits(self):
@@ -350,10 +289,10 @@ class MainWindow(QMainWindow):
         # 回転後の画像サイズへWindowを追従
         self.resize_window_to_image()
 
-        # Windowをモニタ中央へ
+        # 回転後のFit表示位置へWindowを配置
         QTimer.singleShot(
             0,
-            self.center_window_on_screen,
+            self.position_window_for_fit_view,
         )
 
         # 画像中央をView中央へ
@@ -401,35 +340,134 @@ class MainWindow(QMainWindow):
 
         allowed_rect = self.get_available_window_rect()
 
+        # geometry() はタイトルバーなどのWindow frameを含まない
+        # frameGeometry() はタイトルバーを含む実際のWindow全体
+        geometry = self.geometry()
+        frame = self.frameGeometry()
+
+        # Window frame が geometry よりどれだけ大きいか
+        frame_extra_width = (
+            frame.width()
+            - geometry.width()
+        )
+
+        frame_extra_height = (
+            frame.height()
+            - geometry.height()
+        )
+
+        # geometry の左上と frameGeometry の左上の差
+        frame_left_offset = (
+            geometry.left()
+            - frame.left()
+        )
+
+        frame_top_offset = (
+            geometry.top()
+            - frame.top()
+        )
+
+        # frame全体がモニタ内に収まるよう、
+        # geometry側で使える最大サイズを求める
+        max_window_width = max(
+            1,
+            allowed_rect.width() - frame_extra_width,
+        )
+
+        max_window_height = max(
+            1,
+            allowed_rect.height() - frame_extra_height,
+        )
+
         target_width = min(
             desired_width,
-            allowed_rect.width(),
+            max_window_width,
         )
 
         target_height = min(
             desired_height,
-            allowed_rect.height(),
+            max_window_height,
         )
 
-        # 現在のウィンドウ中心
-        current_center = self.frameGeometry().center()
+        # 実際のWindow frameサイズ
+        target_frame_width = (
+            target_width
+            + frame_extra_width
+        )
 
-        # まずは現在中心から左右均等に広げる
-        new_x = int(
+        target_frame_height = (
+            target_height
+            + frame_extra_height
+        )
+
+        # 現在のWindow frame中心
+        current_center = frame.center()
+
+        # frameを中心から均等に拡大
+        new_frame_x = int(
             current_center.x()
-            - target_width / 2
+            - target_frame_width / 2
         )
 
-        new_y = int(
+        new_frame_y = int(
             current_center.y()
-            - target_height / 2
+            - target_frame_height / 2
         )
 
-        # 左右が画面外にはみ出さないよう補正
+        # frame全体がallowed_rectから出ないように補正
+        min_frame_x = allowed_rect.left()
+
+        max_frame_x = (
+            allowed_rect.right()
+            - target_frame_width
+            + 1
+        )
+
+        min_frame_y = allowed_rect.top()
+
+        max_frame_y = (
+            allowed_rect.bottom()
+            - target_frame_height
+            + 1
+        )
+
+        new_frame_x = max(
+            min_frame_x,
+            min(new_frame_x, max_frame_x),
+        )
+
+        new_frame_y = max(
+            min_frame_y,
+            min(new_frame_y, max_frame_y),
+        )
+
+        # setGeometry() は frame ではなく geometry を設定するため、
+        # frameとの差分を戻して指定する
+        self.setGeometry(
+            new_frame_x + frame_left_offset,
+            new_frame_y + frame_top_offset,
+            target_width,
+            target_height,
+        )
+
+        # resize後のWindow状態を基準に制限を設定
+        self.update_window_size_limits()
+
+    # ウィンドウを画面上端・水平方向中央へ配置
+    def position_window_for_fit_view(self):
+        allowed_rect = self.get_available_window_rect()
+        frame = self.frameGeometry()
+
+        new_x = int(
+            allowed_rect.center().x()
+            - frame.width() / 2
+        )
+
+        # 左右の利用可能領域からはみ出さないようにする
         min_x = allowed_rect.left()
         max_x = (
             allowed_rect.right()
-            - target_width
+            - frame.width()
             + 1
         )
 
@@ -438,29 +476,13 @@ class MainWindow(QMainWindow):
             min(new_x, max_x),
         )
 
-        # 上下も同様に補正
-        min_y = allowed_rect.top()
-        max_y = (
-            allowed_rect.bottom()
-            - target_height
-            + 1
-        )
+        # タイトルバーを画面上端へ合わせる
+        new_y = allowed_rect.top()
 
-        new_y = max(
-            min_y,
-            min(new_y, max_y),
-        )
-
-        # サイズと位置を同時に変更
-        self.setGeometry(
+        self.move(
             new_x,
             new_y,
-            target_width,
-            target_height,
         )
-
-        # resize後のWindow状態を基準に制限を設定
-        self.update_window_size_limits()
     
     # 画像の初期表示 (高解像度なら画面高さを上限に縮小表示)
     def reset_to_initial_view(self):
@@ -485,7 +507,7 @@ class MainWindow(QMainWindow):
 
         QTimer.singleShot(
             0,
-            self.center_window_on_screen,
+            self.position_window_for_fit_view,
         )
     
     def apply_scale(self):
