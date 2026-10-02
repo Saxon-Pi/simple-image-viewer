@@ -401,63 +401,122 @@ class MainWindow(QMainWindow):
 
         allowed_rect = self.get_available_window_rect()
 
+        # geometry() はタイトルバーなどのWindow frameを含まない
+        # frameGeometry() はタイトルバーを含む実際のWindow全体
+        geometry = self.geometry()
+        frame = self.frameGeometry()
+
+        # Window frame が geometry よりどれだけ大きいか
+        frame_extra_width = (
+            frame.width()
+            - geometry.width()
+        )
+
+        frame_extra_height = (
+            frame.height()
+            - geometry.height()
+        )
+
+        # geometry の左上と frameGeometry の左上の差
+        frame_left_offset = (
+            geometry.left()
+            - frame.left()
+        )
+
+        frame_top_offset = (
+            geometry.top()
+            - frame.top()
+        )
+
+        # frame全体がモニタ内に収まるよう、
+        # geometry側で使える最大サイズを求める
+        max_window_width = max(
+            1,
+            allowed_rect.width() - frame_extra_width,
+        )
+
+        max_window_height = max(
+            1,
+            allowed_rect.height() - frame_extra_height,
+        )
+
         target_width = min(
             desired_width,
-            allowed_rect.width(),
+            max_window_width,
         )
 
         target_height = min(
             desired_height,
-            allowed_rect.height(),
+            max_window_height,
         )
 
-        # 現在のウィンドウ中心
-        current_center = self.frameGeometry().center()
+        # 実際のWindow frameサイズ
+        target_frame_width = (
+            target_width
+            + frame_extra_width
+        )
 
-        # まずは現在中心から左右均等に広げる
-        new_x = int(
+        target_frame_height = (
+            target_height
+            + frame_extra_height
+        )
+
+        # 現在のWindow frame中心
+        current_center = frame.center()
+
+        # frameを中心から均等に拡大
+        new_frame_x = int(
             current_center.x()
-            - target_width / 2
+            - target_frame_width / 2
         )
 
-        new_y = int(
+        new_frame_y = int(
             current_center.y()
-            - target_height / 2
+            - target_frame_height / 2
         )
 
-        # 左右が画面外にはみ出さないよう補正
-        min_x = allowed_rect.left()
-        max_x = (
+        # frame全体がallowed_rectから出ないように補正
+        min_frame_x = allowed_rect.left()
+
+        max_frame_x = (
             allowed_rect.right()
-            - target_width
+            - target_frame_width
             + 1
         )
 
-        new_x = max(
-            min_x,
-            min(new_x, max_x),
-        )
+        min_frame_y = allowed_rect.top()
 
-        # 上下も同様に補正
-        min_y = allowed_rect.top()
-        max_y = (
+        max_frame_y = (
             allowed_rect.bottom()
-            - target_height
+            - target_frame_height
             + 1
         )
 
-        new_y = max(
-            min_y,
-            min(new_y, max_y),
+        new_frame_x = max(
+            min_frame_x,
+            min(new_frame_x, max_frame_x),
         )
 
-        # サイズと位置を同時に変更
+        new_frame_y = max(
+            min_frame_y,
+            min(new_frame_y, max_frame_y),
+        )
+
+        # setGeometry() は frame ではなく geometry を設定するため、
+        # frameとの差分を戻して指定する
         self.setGeometry(
-            new_x,
-            new_y,
+            new_frame_x + frame_left_offset,
+            new_frame_y + frame_top_offset,
             target_width,
             target_height,
         )
+
+        print("--- window geometry debug ---")
+        print("geometry     :", self.geometry())
+        print("frameGeometry:", self.frameGeometry())
+        print("allowed_rect :", allowed_rect)
+        print("pos          :", self.pos())
+        print("-----------------------------")
 
         # resize後のWindow状態を基準に制限を設定
         self.update_window_size_limits()
