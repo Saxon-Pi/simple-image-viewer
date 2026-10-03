@@ -16,6 +16,7 @@ from PySide6.QtGui import QAction, QPainter, QPixmap
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsView,
@@ -59,6 +60,18 @@ class MainWindow(QMainWindow):
 
         self.toolbar = QToolBar("Image Toolbar", self)
         self.addToolBar(self.toolbar)
+
+        # 画像を開くアクション
+        self.open_action = QAction("Open", self)
+        self.open_action.triggered.connect(
+            self.open_image_file
+        )
+
+        self.toolbar.addAction(
+            self.open_action
+        )
+
+        self.toolbar.addSeparator()
 
         # 左回転
         self.rotate_left_action = QAction("Rotate Left", self)
@@ -713,6 +726,27 @@ class MainWindow(QMainWindow):
             # クリックした画像位置を View中央へ
             lambda: self.view.centerOn(scene_pos),
         )
+
+    # 画像ファイルを開くためのエクスプローラを表示
+    def open_image_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Image",
+            "",
+            "Images (*.jpg *.jpeg *.png *.webp *.bmp *.gif)",
+        )
+
+        # キャンセルされた場合
+        if not file_path:
+            return
+
+        image_path = Path(file_path)
+
+        # 選択した画像のフォルダを対象にする
+        self.load_image_list(image_path)
+
+        # 選択した画像を表示
+        self.load_image(image_path)
     
     # キー入力
     def keyPressEvent(self, event):
