@@ -8,6 +8,8 @@ QGraphicsPixmapItem: Scene 上に存在する画像オブジェクト
 QGraphicsView: ユーザーが実際に見る、Scene の一部分を画面に表示する窓
 """
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -72,6 +74,16 @@ class MainWindow(QMainWindow):
         )
 
         self.toolbar.addSeparator()
+
+        # 表示中の画像のフォルダを開くアクション
+        self.open_folder_action = QAction("Open Folder", self)
+        self.open_folder_action.triggered.connect(
+            self.open_current_folder
+        )
+
+        self.toolbar.addAction(
+            self.open_folder_action
+        )
 
         # 左回転
         self.rotate_left_action = QAction("Rotate Left", self)
@@ -747,6 +759,19 @@ class MainWindow(QMainWindow):
 
         # 選択した画像を表示
         self.load_image(image_path)
+
+    # 表示中の画像のフォルダを開く
+    def open_current_folder(self):
+        folder_path = self.current_image_path.parent
+
+        if sys.platform == "win32":
+            os.startfile(folder_path)
+
+        elif sys.platform == "darwin":
+            subprocess.run(
+                ["open", str(folder_path)],
+                check=False,
+            )
     
     # キー入力
     def keyPressEvent(self, event):
