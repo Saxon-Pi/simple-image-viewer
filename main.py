@@ -55,7 +55,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Simple Image Viewer")
         self.resize(800, 600)
 
-        # ------------- 画像操作用のツールバーを作成-------------
+        # ============= 画像操作用のツールバーを作成 =============
 
         self.toolbar = QToolBar("Image Toolbar", self)
         self.addToolBar(self.toolbar)
@@ -80,6 +80,18 @@ class MainWindow(QMainWindow):
             self.rotate_right_action
         )
 
+        self.toolbar.addSeparator()
+
+        # 最初の画像
+        self.first_action = QAction("First", self)
+        self.first_action.triggered.connect(
+            self.show_first_image
+        )
+
+        self.toolbar.addAction(
+            self.first_action
+        )
+
         # 前の画像
         self.previous_action = QAction("Previous", self)
         self.previous_action.triggered.connect(
@@ -100,7 +112,17 @@ class MainWindow(QMainWindow):
             self.next_action
         )
 
-        # -----------------------------------------------------
+        # 最後の画像
+        self.last_action = QAction("Last", self)
+        self.last_action.triggered.connect(
+            self.show_last_image
+        )
+
+        self.toolbar.addAction(
+            self.last_action
+        )
+
+        # =====================================================
 
         self.rotation_angle = 0 # 現在の表示上の回転角度
         self.initial_scale = 1.0 # 初期の画像スケール
@@ -213,6 +235,29 @@ class MainWindow(QMainWindow):
             return
 
         self.current_index -= 1
+
+        self.load_image(
+            self.image_paths[self.current_index]
+        )
+    
+    # 最初の画像を表示
+    def show_first_image(self):
+        if not self.image_paths:
+            return
+
+        self.current_index = 0
+
+        self.load_image(
+            self.image_paths[self.current_index]
+        )
+
+
+    # 最後の画像を表示
+    def show_last_image(self):
+        if not self.image_paths:
+            return
+
+        self.current_index = len(self.image_paths) - 1
 
         self.load_image(
             self.image_paths[self.current_index]
@@ -688,12 +733,18 @@ class MainWindow(QMainWindow):
             self.zoom_out()
         elif event.key() == Qt.Key_0:
             self.reset_to_initial_view()
-        # "→" : show_next_image()
-        # "←" : show_previous_image()
-        elif event.key() == Qt.Key_Right:
-            self.show_next_image()
+        # "Home": show_first_image()
+        # "←"   : show_previous_image()
+        # "→"   : show_next_image()
+        # "End" : show_last_image()
+        elif event.key() == Qt.Key_Home:
+            self.show_first_image()
         elif event.key() == Qt.Key_Left:
             self.show_previous_image()
+        elif event.key() == Qt.Key_Right:
+            self.show_next_image()
+        elif event.key() == Qt.Key_End:
+            self.show_last_image()
         else:
             super().keyPressEvent(event)
     
