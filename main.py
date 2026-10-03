@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtGui import QAction, QPainter, QPixmap
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
 from PySide6.QtWidgets import (
     QApplication,
@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsView,
     QMainWindow,
+    QToolBar,
 )
 
 # モニタとウィンドウのマージン
@@ -53,6 +54,53 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Simple Image Viewer")
         self.resize(800, 600)
+
+        # ------------- 画像操作用のツールバーを作成-------------
+
+        self.toolbar = QToolBar("Image Toolbar", self)
+        self.addToolBar(self.toolbar)
+
+        # 左回転
+        self.rotate_left_action = QAction("Rotate Left", self)
+        self.rotate_left_action.triggered.connect(
+            self.rotate_left
+        )
+
+        self.toolbar.addAction(
+            self.rotate_left_action
+        )
+
+        # 右回転
+        self.rotate_right_action = QAction("Rotate Right", self)
+        self.rotate_right_action.triggered.connect(
+            self.rotate_right
+        )
+
+        self.toolbar.addAction(
+            self.rotate_right_action
+        )
+
+        # 前の画像
+        self.previous_action = QAction("Previous", self)
+        self.previous_action.triggered.connect(
+            self.show_previous_image
+        )
+
+        self.toolbar.addAction(
+            self.previous_action
+        )
+
+        # 次の画像
+        self.next_action = QAction("Next", self)
+        self.next_action.triggered.connect(
+            self.show_next_image
+        )
+
+        self.toolbar.addAction(
+            self.next_action
+        )
+
+        # -----------------------------------------------------
 
         self.rotation_angle = 0 # 現在の表示上の回転角度
         self.initial_scale = 1.0 # 初期の画像スケール
