@@ -13,8 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QPainter, QPixmap
+from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtGui import QAction, QIcon, QPainter, QPixmap
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
 from PySide6.QtWidgets import (
     QApplication,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsView,
     QMainWindow,
+    QStyle,
     QToolBar,
 )
 
@@ -41,6 +42,10 @@ SUPPORTED_EXTENSIONS = {
     ".bmp",
     ".gif",
 }
+
+# ツールバーのアイコン画像のパス
+BASE_DIR = Path(__file__).resolve().parent
+ICON_DIR = BASE_DIR / "assets" / "icons"
 
 class MainWindow(QMainWindow):
     def __init__(self, initial_image_path):
@@ -63,8 +68,18 @@ class MainWindow(QMainWindow):
         self.toolbar = QToolBar("Image Toolbar", self)
         self.addToolBar(self.toolbar)
 
+        self.toolbar.setIconSize(
+            QSize(20, 20)
+        )
+
         # 画像を開くアクション
         self.open_action = QAction("Open", self)
+        self.open_action.setToolTip("Open Image")
+
+        self.open_action.setIcon(
+            QIcon(str(ICON_DIR / "open.svg"))
+        )
+        
         self.open_action.triggered.connect(
             self.open_image_file
         )
@@ -77,6 +92,12 @@ class MainWindow(QMainWindow):
 
         # 表示中の画像のフォルダを開くアクション
         self.open_folder_action = QAction("Open Folder", self)
+        self.open_folder_action.setToolTip("Open Current Folder")
+
+        self.open_folder_action.setIcon(
+            QIcon(str(ICON_DIR / "open-folder.svg"))
+        )
+
         self.open_folder_action.triggered.connect(
             self.open_current_folder
         )
@@ -87,6 +108,23 @@ class MainWindow(QMainWindow):
 
         # 左回転
         self.rotate_left_action = QAction("Rotate Left", self)
+        self.rotate_left_action.setToolTip("Rotate Left (Shift + R)")
+
+        self.rotate_left_action = QAction(
+            "Rotate Left",
+            self,
+        )
+
+        self.rotate_left_action.setIcon(
+            QIcon(
+                str(ICON_DIR / "rotate-left.svg")
+            )
+        )
+
+        self.rotate_left_action.setToolTip(
+            "Rotate Left (Shift + R)"
+        )
+        
         self.rotate_left_action.triggered.connect(
             self.rotate_left
         )
@@ -97,6 +135,23 @@ class MainWindow(QMainWindow):
 
         # 右回転
         self.rotate_right_action = QAction("Rotate Right", self)
+        self.rotate_right_action.setToolTip("Rotate Right (R)")
+
+        self.rotate_right_action = QAction(
+            "Rotate Right",
+            self,
+        )
+
+        self.rotate_right_action.setIcon(
+            QIcon(
+                str(ICON_DIR / "rotate-right.svg")
+            )
+        )
+
+        self.rotate_right_action.setToolTip(
+            "Rotate Right (R)"
+        )
+
         self.rotate_right_action.triggered.connect(
             self.rotate_right
         )
@@ -109,6 +164,12 @@ class MainWindow(QMainWindow):
 
         # 最初の画像
         self.first_action = QAction("First", self)
+        self.first_action.setToolTip("First Image (Home)")
+
+        self.first_action.setIcon(
+            QIcon(str(ICON_DIR / "first.svg"))
+        )
+
         self.first_action.triggered.connect(
             self.show_first_image
         )
@@ -119,6 +180,12 @@ class MainWindow(QMainWindow):
 
         # 前の画像
         self.previous_action = QAction("Previous", self)
+        self.previous_action.setToolTip("Previous Image (←)")
+
+        self.previous_action.setIcon(
+            QIcon(str(ICON_DIR / "previous.svg"))
+        )
+        
         self.previous_action.triggered.connect(
             self.show_previous_image
         )
@@ -129,6 +196,12 @@ class MainWindow(QMainWindow):
 
         # 次の画像
         self.next_action = QAction("Next", self)
+        self.next_action.setToolTip("Next Image (→)")
+
+        self.next_action.setIcon(
+            QIcon(str(ICON_DIR / "next.svg"))
+        )
+
         self.next_action.triggered.connect(
             self.show_next_image
         )
@@ -139,6 +212,12 @@ class MainWindow(QMainWindow):
 
         # 最後の画像
         self.last_action = QAction("Last", self)
+        self.last_action.setToolTip("Last Image (End)")
+
+        self.last_action.setIcon(
+            QIcon(str(ICON_DIR / "last.svg"))
+        )
+        
         self.last_action.triggered.connect(
             self.show_last_image
         )
