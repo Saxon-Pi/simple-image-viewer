@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsView,
     QMainWindow,
-    QStyle,
+    QMenu,
     QToolBar,
 )
 
@@ -278,6 +278,27 @@ class MainWindow(QMainWindow):
 
         # 同一ディレクトリの画像一覧を取得
         self.load_image_list(initial_image_path)
+
+    # 右クリックメニューを表示（内容はツールバーと同様）
+    def show_context_menu(self, global_pos):
+        menu = QMenu(self)
+
+        menu.addAction(self.open_action)
+        menu.addAction(self.open_folder_action)
+
+        menu.addSeparator()
+
+        menu.addAction(self.rotate_left_action)
+        menu.addAction(self.rotate_right_action)
+
+        menu.addSeparator()
+
+        menu.addAction(self.first_action)
+        menu.addAction(self.previous_action)
+        menu.addAction(self.next_action)
+        menu.addAction(self.last_action)
+
+        menu.exec(global_pos)
     
     # 同一ディレクトリの画像一覧を取得する
     def load_image_list(self, image_path):
@@ -893,6 +914,22 @@ class ImageView(QGraphicsView):
 
         self.is_panning = False
         self.last_mouse_pos = None
+        self.right_press_pos = None
+        self.right_dragged = False
+
+    # パンできる状態か確認する
+    def can_pan(self):
+        horizontal_scrollable = (
+            self.horizontalScrollBar().maximum()
+            > self.horizontalScrollBar().minimum()
+        )
+
+        vertical_scrollable = (
+            self.verticalScrollBar().maximum()
+            > self.verticalScrollBar().minimum()
+        )
+
+        return horizontal_scrollable or vertical_scrollable
     
     def restore_zoom_anchor(self, scene_pos_before, global_pos):
         # ウィンドウサイズ変更後のマウスポインタ位置を View座標へ変換
@@ -978,10 +1015,13 @@ class ImageView(QGraphicsView):
             event.accept()
             return
 
-        # 右クリック開始時にパンモードに移行
+        # 右クリック開始
         if event.button() == Qt.RightButton:
-            self.is_panning = True
-            self.last_mouse_pos = event.position().toPoint()
+            self.right_press_pos = event.position().toPoint()
+            self.last_mouse_pos = self.right_press_pos
+
+            self.right_dragged = False
+            self.is_panning = False
 
             event.accept()
             return
@@ -990,18 +1030,41 @@ class ImageView(QGraphicsView):
     
     # 右クリック押下 + マウス移動中に Scene の表示位置をずらす
     def mouseMoveEvent(self, event):
-        if self.is_panning and self.last_mouse_pos is not None:
+        if (
+            self.right_press_pos is not None
+            and event.buttons() & Qt.RightButton
+        ):
             current_pos = event.position().toPoint()
 
-            delta = current_pos - self.last_mouse_pos
+            # まだドラッグ判定されていない場合
+            if not self.right_dragged:
+                drag_distance = (
+                    current_pos - self.right_press_pos
+                ).manhattanLength()
 
-            self.horizontalScrollBar().setValue(
-                self.horizontalScrollBar().value() - delta.x()
-            )
+                drag_threshold = (
+                    QApplication.styleHints().startDragDistance()
+                )
 
-            self.verticalScrollBar().setValue(
-                self.verticalScrollBar().value() - delta.y()
-            )
+                if drag_distance >= drag_threshold:
+                    self.right_dragged = True
+
+                    if self.can_pan():
+                        self.is_panning = True
+
+            # パン中なら画像を移動
+            if self.is_panning:
+                delta = current_pos - self.last_mouse_pos
+
+                self.horizontalScrollBar().setValue(
+                    self.horizontalScrollBar().value()
+                    - delta.x()
+                )
+
+                self.verticalScrollBar().setValue(
+                    self.verticalScrollBar().value()
+                    - delta.y()
+                )
 
             self.last_mouse_pos = current_pos
 
@@ -1013,8 +1076,18 @@ class ImageView(QGraphicsView):
     # 右クリックを離すとパンモード終了
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.RightButton:
+            # ドラッグされていなければ通常の右クリック
+            show_menu = not self.right_dragged
+
             self.is_panning = False
             self.last_mouse_pos = None
+            self.right_press_pos = None
+            self.right_dragged = False
+
+            if show_menu:
+                self.window().show_context_menu(
+                    event.globalPosition().toPoint()
+                )
 
             event.accept()
             return
