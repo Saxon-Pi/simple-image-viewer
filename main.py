@@ -107,9 +107,6 @@ class MainWindow(QMainWindow):
         )
 
         # 左回転
-        self.rotate_left_action = QAction("Rotate Left", self)
-        self.rotate_left_action.setToolTip("Rotate Left (Shift + R)")
-
         self.rotate_left_action = QAction(
             "Rotate Left",
             self,
@@ -134,9 +131,6 @@ class MainWindow(QMainWindow):
         )
 
         # 右回転
-        self.rotate_right_action = QAction("Rotate Right", self)
-        self.rotate_right_action.setToolTip("Rotate Right (R)")
-
         self.rotate_right_action = QAction(
             "Rotate Right",
             self,
@@ -916,6 +910,8 @@ class ImageView(QGraphicsView):
         self.last_mouse_pos = None
         self.right_press_pos = None
         self.right_dragged = False
+        self.left_press_global_pos = None
+        self.window_start_pos = None
 
     # パンできる状態か確認する
     def can_pan(self):
@@ -1015,7 +1011,7 @@ class ImageView(QGraphicsView):
             event.accept()
             return
 
-        # 右クリック開始
+        # 右クリック開始時：パンの準備
         if event.button() == Qt.RightButton:
             self.right_press_pos = event.position().toPoint()
             self.last_mouse_pos = self.right_press_pos
@@ -1025,11 +1021,45 @@ class ImageView(QGraphicsView):
 
             event.accept()
             return
+        
+        # 左クリック開始時：ウィンドウ移動の準備
+        if event.button() == Qt.LeftButton:
+            self.left_press_global_pos = (
+                event.globalPosition().toPoint()
+            )
+
+            self.window_start_pos = (
+                self.window().pos()
+            )
+
+            event.accept()
+            return
 
         super().mousePressEvent(event)
     
     # 右クリック押下 + マウス移動中に Scene の表示位置をずらす
     def mouseMoveEvent(self, event):
+        # 左ドラッグ中はウィンドウ自体を移動
+        if (
+            self.left_press_global_pos is not None
+            and event.buttons() & Qt.LeftButton
+        ):
+            current_global_pos = (
+                event.globalPosition().toPoint()
+            )
+
+            delta = (
+                current_global_pos
+                - self.left_press_global_pos
+            )
+
+            self.window().move(
+                self.window_start_pos + delta
+            )
+
+            event.accept()
+            return
+
         if (
             self.right_press_pos is not None
             and event.buttons() & Qt.RightButton
@@ -1073,8 +1103,17 @@ class ImageView(QGraphicsView):
 
         super().mouseMoveEvent(event)
     
-    # 右クリックを離すとパンモード終了
+    
     def mouseReleaseEvent(self, event):
+        # 左クリックを離すとウィンドウ移動終了
+        if event.button() == Qt.LeftButton:
+            self.left_press_global_pos = None
+            self.window_start_pos = None
+
+            event.accept()
+            return
+        
+        # 右クリックを離すとパンモード終了
         if event.button() == Qt.RightButton:
             # ドラッグされていなければ通常の右クリック
             show_menu = not self.right_dragged
