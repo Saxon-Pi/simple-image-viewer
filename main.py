@@ -866,6 +866,22 @@ class MainWindow(QMainWindow):
                 ["open", str(folder_path)],
                 check=False,
             )
+
+    # タイトルバーが画面上端より外へ出た場合だけ位置を戻す
+    def restore_window_top_boundary(self):
+        allowed_rect = self.get_available_window_rect()
+        frame = self.frameGeometry()
+
+        if frame.top() < allowed_rect.top():
+            correction_y = (
+                allowed_rect.top()
+                - frame.top()
+            )
+
+            self.move(
+                self.pos().x(),
+                self.pos().y() + correction_y,
+            )
     
     # キー入力
     def keyPressEvent(self, event):
@@ -1107,6 +1123,9 @@ class ImageView(QGraphicsView):
     def mouseReleaseEvent(self, event):
         # 左クリックを離すとウィンドウ移動終了
         if event.button() == Qt.LeftButton:
+            # 上側へはみ出した場合だけウィンドウ位置を戻す
+            self.window().restore_window_top_boundary()
+
             self.left_press_global_pos = None
             self.window_start_pos = None
 
