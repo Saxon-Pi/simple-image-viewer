@@ -14,7 +14,14 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtGui import QAction, QIcon, QPainter, QPixmap
+from PySide6.QtGui import (
+    QAction,
+    QCursor,
+    QIcon,
+    QPainter,
+    QPalette,
+    QPixmap,
+)
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
 from PySide6.QtWidgets import (
     QApplication,
@@ -66,11 +73,29 @@ class MainWindow(QMainWindow):
         # ============= 画像操作用のツールバーを作成 =============
 
         self.toolbar = QToolBar("Image Toolbar", self)
-        self.addToolBar(self.toolbar)
+
+        self.toolbar.setMovable(False)
+        self.toolbar.setFloatable(False)
+
+        # オーバーレイ表示でもToolbar自身に背景を描画させる
+        toolbar_palette = self.toolbar.palette()
+
+        toolbar_palette.setColor(
+            QPalette.Window,
+            self.palette().color(QPalette.Window),
+        )
+
+        self.toolbar.setPalette(toolbar_palette)
+        self.toolbar.setAutoFillBackground(True)
 
         self.toolbar.setIconSize(
             QSize(20, 20)
         )
+
+        # 通常時はツールバーを非表示
+        self.toolbar.hide()
+        # ツールバーを移動させない
+        self.toolbar.setMovable(False)
 
         # 画像を開くアクション
         self.open_action = QAction("Open", self)
@@ -220,6 +245,19 @@ class MainWindow(QMainWindow):
             self.last_action
         )
 
+        # 初期サイズ
+        toolbar_height = self.toolbar.sizeHint().height()
+
+        self.toolbar.setGeometry(
+            0,
+            0,
+            self.width(),
+            toolbar_height,
+        )
+
+        self.toolbar.raise_()
+        self.toolbar.hide()
+
         # =====================================================
 
         self.rotation_angle = 0 # 現在の表示上の回転角度
@@ -272,6 +310,13 @@ class MainWindow(QMainWindow):
 
         # 同一ディレクトリの画像一覧を取得
         self.load_image_list(initial_image_path)
+
+        # マウスポインタ位置を監視してツールバーの表示を切り替える
+        self.toolbar_visibility_timer = QTimer(self)
+        self.toolbar_visibility_timer.timeout.connect(
+            self.update_toolbar_visibility
+        )
+        self.toolbar_visibility_timer.start(100)
 
     # 右クリックメニューを表示（内容はツールバーと同様）
     def show_context_menu(self, global_pos):
@@ -882,6 +927,64 @@ class MainWindow(QMainWindow):
                 self.pos().x(),
                 self.pos().y() + correction_y,
             )
+
+    # マウスポインタ位置に応じてツールバーの表示・非表示を切り替える
+    def update_toolbar_visibility(self):
+        cursor_global_pos = QCursor.pos()
+
+        # マウスポインタがウィンドウ自体の外ならツールバーを隠す
+        if not self.frameGeometry().contains(
+            cursor_global_pos
+        ):
+            self.toolbar.hide()
+            return
+
+        # Global座標 → MainWindow内の座標
+        cursor_pos = self.mapFromGlobal(
+            cursor_global_pos
+        )
+
+        if self.toolbar.isVisible():
+            # ツールバー表示中は、ツールバーの少し下まで表示を維持
+            visible_area_bottom = (
+                self.toolbar.height() + 8
+            )
+
+            should_show = (
+                cursor_pos.y()
+                <= visible_area_bottom
+            )
+
+        else:
+            # 非表示中はウィンドウ上端付近で再表示
+            reveal_distance = 8
+
+            should_show = (
+                cursor_pos.y()
+                <= reveal_distance
+            )
+
+        self.toolbar.setVisible(
+            should_show
+        )
+
+        if should_show:
+            self.toolbar.raise_()
+
+    # ウィンドウリサイズ時にツールバーの幅を合わせる
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        toolbar_height = self.toolbar.sizeHint().height()
+
+        self.toolbar.setGeometry(
+            0,
+            0,
+            self.width(),
+            toolbar_height,
+        )
+
+        self.toolbar.raise_()
     
     # キー入力
     def keyPressEvent(self, event):
