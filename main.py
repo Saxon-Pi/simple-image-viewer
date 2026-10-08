@@ -546,12 +546,6 @@ class MainWindow(QMainWindow):
         # 回転後の画像サイズへWindowを追従
         self.resize_window_to_image()
 
-        # 回転後のFit表示位置へWindowを配置
-        QTimer.singleShot(
-            0,
-            self.position_window_for_fit_view,
-        )
-
         # 画像中央をView中央へ
         QTimer.singleShot(
             0,
@@ -710,8 +704,8 @@ class MainWindow(QMainWindow):
         # resize後のWindow状態を基準に制限を設定
         self.update_window_size_limits()
 
-    # ウィンドウを画面上端・水平方向中央へ配置
-    def position_window_for_fit_view(self):
+    # ウィンドウをモニタ中央に配置する (初期表示時)
+    def position_window_for_initial_view(self):
         allowed_rect = self.get_available_window_rect()
         frame = self.frameGeometry()
 
@@ -720,11 +714,23 @@ class MainWindow(QMainWindow):
             - frame.width() / 2
         )
 
-        # 左右の利用可能領域からはみ出さないようにする
+        new_y = int(
+            allowed_rect.center().y()
+            - frame.height() / 2
+        )
+
+        # 利用可能領域から大きく外れないように補正
         min_x = allowed_rect.left()
         max_x = (
             allowed_rect.right()
             - frame.width()
+            + 1
+        )
+
+        min_y = allowed_rect.top()
+        max_y = (
+            allowed_rect.bottom()
+            - frame.height()
             + 1
         )
 
@@ -733,8 +739,10 @@ class MainWindow(QMainWindow):
             min(new_x, max_x),
         )
 
-        # タイトルバーを画面上端へ合わせる
-        new_y = allowed_rect.top()
+        new_y = max(
+            min_y,
+            min(new_y, max_y),
+        )
 
         self.move(
             new_x,
@@ -762,9 +770,13 @@ class MainWindow(QMainWindow):
             ),
         )
 
+    # 初期表示時にウィンドウをモニタ中央に配置する
+    def initialize_view(self):
+        self.reset_to_initial_view()
+
         QTimer.singleShot(
             0,
-            self.position_window_for_fit_view,
+            self.position_window_for_initial_view,
         )
     
     def apply_scale(self):
@@ -1271,7 +1283,7 @@ def main():
     # Window表示後に初期画像サイズを計算する
     QTimer.singleShot(
         0,
-        window.reset_to_initial_view,
+        window.initialize_view,
     )
 
     # app.exec() でウィンドウを開いたままユーザー操作を待ち続けるイベントループを開始する
