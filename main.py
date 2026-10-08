@@ -8,18 +8,30 @@ QGraphicsPixmapItem: Scene 上に存在する画像オブジェクト
 QGraphicsView: ユーザーが実際に見る、Scene の一部分を画面に表示する窓
 """
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtGui import (
+    QAction,
+    QCursor,
+    QIcon,
+    QPainter,
+    QPalette,
+    QPixmap,
+)
 # QApplication がアプリ全体を管理、QMainWindow が実際のウィンドウ本体
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsView,
     QMainWindow,
+    QMenu,
+    QToolBar,
 )
 
 # モニタとウィンドウのマージン
@@ -38,6 +50,10 @@ SUPPORTED_EXTENSIONS = {
     ".gif",
 }
 
+# ツールバーのアイコン画像のパス
+BASE_DIR = Path(__file__).resolve().parent
+ICON_DIR = BASE_DIR / "assets" / "icons"
+
 class MainWindow(QMainWindow):
     def __init__(self, initial_image_path):
         super().__init__()
@@ -53,6 +69,196 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Simple Image Viewer")
         self.resize(800, 600)
+
+        # ============= 画像操作用のツールバーを作成 =============
+
+        self.toolbar = QToolBar("Image Toolbar", self)
+
+        self.toolbar.setMovable(False)
+        self.toolbar.setFloatable(False)
+
+        # オーバーレイ表示でもToolbar自身に背景を描画させる
+        toolbar_palette = self.toolbar.palette()
+
+        toolbar_palette.setColor(
+            QPalette.Window,
+            self.palette().color(QPalette.Window),
+        )
+
+        self.toolbar.setPalette(toolbar_palette)
+        self.toolbar.setAutoFillBackground(True)
+
+        self.toolbar.setIconSize(
+            QSize(20, 20)
+        )
+
+        # 通常時はツールバーを非表示
+        self.toolbar.hide()
+        # ツールバーを移動させない
+        self.toolbar.setMovable(False)
+
+        # 画像を開くアクション
+        self.open_action = QAction("Open", self)
+        self.open_action.setToolTip("Open Image")
+
+        self.open_action.setIcon(
+            QIcon(str(ICON_DIR / "open.svg"))
+        )
+        
+        self.open_action.triggered.connect(
+            self.open_image_file
+        )
+
+        self.toolbar.addAction(
+            self.open_action
+        )
+
+        self.toolbar.addSeparator()
+
+        # 表示中の画像のフォルダを開くアクション
+        self.open_folder_action = QAction("Open Folder", self)
+        self.open_folder_action.setToolTip("Open Current Folder")
+
+        self.open_folder_action.setIcon(
+            QIcon(str(ICON_DIR / "open-folder.svg"))
+        )
+
+        self.open_folder_action.triggered.connect(
+            self.open_current_folder
+        )
+
+        self.toolbar.addAction(
+            self.open_folder_action
+        )
+
+        # 左回転
+        self.rotate_left_action = QAction(
+            "Rotate Left",
+            self,
+        )
+
+        self.rotate_left_action.setIcon(
+            QIcon(
+                str(ICON_DIR / "rotate-left.svg")
+            )
+        )
+
+        self.rotate_left_action.setToolTip(
+            "Rotate Left (Shift + R)"
+        )
+        
+        self.rotate_left_action.triggered.connect(
+            self.rotate_left
+        )
+
+        self.toolbar.addAction(
+            self.rotate_left_action
+        )
+
+        # 右回転
+        self.rotate_right_action = QAction(
+            "Rotate Right",
+            self,
+        )
+
+        self.rotate_right_action.setIcon(
+            QIcon(
+                str(ICON_DIR / "rotate-right.svg")
+            )
+        )
+
+        self.rotate_right_action.setToolTip(
+            "Rotate Right (R)"
+        )
+
+        self.rotate_right_action.triggered.connect(
+            self.rotate_right
+        )
+
+        self.toolbar.addAction(
+            self.rotate_right_action
+        )
+
+        self.toolbar.addSeparator()
+
+        # 最初の画像
+        self.first_action = QAction("First", self)
+        self.first_action.setToolTip("First Image (Home)")
+
+        self.first_action.setIcon(
+            QIcon(str(ICON_DIR / "first.svg"))
+        )
+
+        self.first_action.triggered.connect(
+            self.show_first_image
+        )
+
+        self.toolbar.addAction(
+            self.first_action
+        )
+
+        # 前の画像
+        self.previous_action = QAction("Previous", self)
+        self.previous_action.setToolTip("Previous Image (←)")
+
+        self.previous_action.setIcon(
+            QIcon(str(ICON_DIR / "previous.svg"))
+        )
+        
+        self.previous_action.triggered.connect(
+            self.show_previous_image
+        )
+
+        self.toolbar.addAction(
+            self.previous_action
+        )
+
+        # 次の画像
+        self.next_action = QAction("Next", self)
+        self.next_action.setToolTip("Next Image (→)")
+
+        self.next_action.setIcon(
+            QIcon(str(ICON_DIR / "next.svg"))
+        )
+
+        self.next_action.triggered.connect(
+            self.show_next_image
+        )
+
+        self.toolbar.addAction(
+            self.next_action
+        )
+
+        # 最後の画像
+        self.last_action = QAction("Last", self)
+        self.last_action.setToolTip("Last Image (End)")
+
+        self.last_action.setIcon(
+            QIcon(str(ICON_DIR / "last.svg"))
+        )
+        
+        self.last_action.triggered.connect(
+            self.show_last_image
+        )
+
+        self.toolbar.addAction(
+            self.last_action
+        )
+
+        # 初期サイズ
+        toolbar_height = self.toolbar.sizeHint().height()
+
+        self.toolbar.setGeometry(
+            0,
+            0,
+            self.width(),
+            toolbar_height,
+        )
+
+        self.toolbar.raise_()
+        self.toolbar.hide()
+
+        # =====================================================
 
         self.rotation_angle = 0 # 現在の表示上の回転角度
         self.initial_scale = 1.0 # 初期の画像スケール
@@ -104,6 +310,34 @@ class MainWindow(QMainWindow):
 
         # 同一ディレクトリの画像一覧を取得
         self.load_image_list(initial_image_path)
+
+        # マウスポインタ位置を監視してツールバーの表示を切り替える
+        self.toolbar_visibility_timer = QTimer(self)
+        self.toolbar_visibility_timer.timeout.connect(
+            self.update_toolbar_visibility
+        )
+        self.toolbar_visibility_timer.start(100)
+
+    # 右クリックメニューを表示（内容はツールバーと同様）
+    def show_context_menu(self, global_pos):
+        menu = QMenu(self)
+
+        menu.addAction(self.open_action)
+        menu.addAction(self.open_folder_action)
+
+        menu.addSeparator()
+
+        menu.addAction(self.rotate_left_action)
+        menu.addAction(self.rotate_right_action)
+
+        menu.addSeparator()
+
+        menu.addAction(self.first_action)
+        menu.addAction(self.previous_action)
+        menu.addAction(self.next_action)
+        menu.addAction(self.last_action)
+
+        menu.exec(global_pos)
     
     # 同一ディレクトリの画像一覧を取得する
     def load_image_list(self, image_path):
@@ -165,6 +399,29 @@ class MainWindow(QMainWindow):
             return
 
         self.current_index -= 1
+
+        self.load_image(
+            self.image_paths[self.current_index]
+        )
+    
+    # 最初の画像を表示
+    def show_first_image(self):
+        if not self.image_paths:
+            return
+
+        self.current_index = 0
+
+        self.load_image(
+            self.image_paths[self.current_index]
+        )
+
+
+    # 最後の画像を表示
+    def show_last_image(self):
+        if not self.image_paths:
+            return
+
+        self.current_index = len(self.image_paths) - 1
 
         self.load_image(
             self.image_paths[self.current_index]
@@ -288,12 +545,6 @@ class MainWindow(QMainWindow):
 
         # 回転後の画像サイズへWindowを追従
         self.resize_window_to_image()
-
-        # 回転後のFit表示位置へWindowを配置
-        QTimer.singleShot(
-            0,
-            self.position_window_for_fit_view,
-        )
 
         # 画像中央をView中央へ
         QTimer.singleShot(
@@ -453,8 +704,8 @@ class MainWindow(QMainWindow):
         # resize後のWindow状態を基準に制限を設定
         self.update_window_size_limits()
 
-    # ウィンドウを画面上端・水平方向中央へ配置
-    def position_window_for_fit_view(self):
+    # ウィンドウをモニタ中央に配置する (初期表示時)
+    def position_window_for_initial_view(self):
         allowed_rect = self.get_available_window_rect()
         frame = self.frameGeometry()
 
@@ -463,11 +714,23 @@ class MainWindow(QMainWindow):
             - frame.width() / 2
         )
 
-        # 左右の利用可能領域からはみ出さないようにする
+        new_y = int(
+            allowed_rect.center().y()
+            - frame.height() / 2
+        )
+
+        # 利用可能領域から大きく外れないように補正
         min_x = allowed_rect.left()
         max_x = (
             allowed_rect.right()
             - frame.width()
+            + 1
+        )
+
+        min_y = allowed_rect.top()
+        max_y = (
+            allowed_rect.bottom()
+            - frame.height()
             + 1
         )
 
@@ -476,8 +739,10 @@ class MainWindow(QMainWindow):
             min(new_x, max_x),
         )
 
-        # タイトルバーを画面上端へ合わせる
-        new_y = allowed_rect.top()
+        new_y = max(
+            min_y,
+            min(new_y, max_y),
+        )
 
         self.move(
             new_x,
@@ -505,9 +770,13 @@ class MainWindow(QMainWindow):
             ),
         )
 
+    # 初期表示時にウィンドウをモニタ中央に配置する
+    def initialize_view(self):
+        self.reset_to_initial_view()
+
         QTimer.singleShot(
             0,
-            self.position_window_for_fit_view,
+            self.position_window_for_initial_view,
         )
     
     def apply_scale(self):
@@ -620,6 +889,114 @@ class MainWindow(QMainWindow):
             # クリックした画像位置を View中央へ
             lambda: self.view.centerOn(scene_pos),
         )
+
+    # 画像ファイルを開くためのエクスプローラを表示
+    def open_image_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Image",
+            "",
+            "Images (*.jpg *.jpeg *.png *.webp *.bmp *.gif)",
+        )
+
+        # キャンセルされた場合
+        if not file_path:
+            return
+
+        image_path = Path(file_path)
+
+        # 選択した画像のフォルダを対象にする
+        self.load_image_list(image_path)
+
+        # 選択した画像を表示
+        self.load_image(image_path)
+
+    # 表示中の画像のフォルダを開く
+    def open_current_folder(self):
+        folder_path = self.current_image_path.parent
+
+        if sys.platform == "win32":
+            os.startfile(folder_path)
+
+        elif sys.platform == "darwin":
+            subprocess.run(
+                ["open", str(folder_path)],
+                check=False,
+            )
+
+    # タイトルバーが画面上端より外へ出た場合だけ位置を戻す
+    def restore_window_top_boundary(self):
+        allowed_rect = self.get_available_window_rect()
+        frame = self.frameGeometry()
+
+        if frame.top() < allowed_rect.top():
+            correction_y = (
+                allowed_rect.top()
+                - frame.top()
+            )
+
+            self.move(
+                self.pos().x(),
+                self.pos().y() + correction_y,
+            )
+
+    # マウスポインタ位置に応じてツールバーの表示・非表示を切り替える
+    def update_toolbar_visibility(self):
+        cursor_global_pos = QCursor.pos()
+
+        # マウスポインタがウィンドウ自体の外ならツールバーを隠す
+        if not self.frameGeometry().contains(
+            cursor_global_pos
+        ):
+            self.toolbar.hide()
+            return
+
+        # Global座標 → MainWindow内の座標
+        cursor_pos = self.mapFromGlobal(
+            cursor_global_pos
+        )
+
+        if self.toolbar.isVisible():
+            # ツールバー表示中は、ツールバーの少し下まで表示を維持
+            visible_area_bottom = (
+                self.toolbar.height() + 8
+            )
+
+            should_show = (
+                cursor_pos.y()
+                <= visible_area_bottom
+            )
+
+        else:
+            # 非表示中はウィンドウ上端付近で再表示
+            reveal_distance = 8
+
+            should_show = (
+                cursor_pos.y()
+                <= reveal_distance
+            )
+
+        self.toolbar.setVisible(
+            should_show
+        )
+
+        if should_show:
+            self.toolbar.raise_()
+
+    # ウィンドウリサイズ時にツールバーの幅を合わせる
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        toolbar_height = self.toolbar.sizeHint().height()
+
+        self.toolbar.setGeometry(
+            0,
+            0,
+            self.width(),
+            toolbar_height,
+        )
+
+        self.toolbar.raise_()
     
     # キー入力
     def keyPressEvent(self, event):
@@ -640,12 +1017,18 @@ class MainWindow(QMainWindow):
             self.zoom_out()
         elif event.key() == Qt.Key_0:
             self.reset_to_initial_view()
-        # "→" : show_next_image()
-        # "←" : show_previous_image()
-        elif event.key() == Qt.Key_Right:
-            self.show_next_image()
+        # "Home": show_first_image()
+        # "←"   : show_previous_image()
+        # "→"   : show_next_image()
+        # "End" : show_last_image()
+        elif event.key() == Qt.Key_Home:
+            self.show_first_image()
         elif event.key() == Qt.Key_Left:
             self.show_previous_image()
+        elif event.key() == Qt.Key_Right:
+            self.show_next_image()
+        elif event.key() == Qt.Key_End:
+            self.show_last_image()
         else:
             super().keyPressEvent(event)
     
@@ -656,6 +1039,24 @@ class ImageView(QGraphicsView):
 
         self.is_panning = False
         self.last_mouse_pos = None
+        self.right_press_pos = None
+        self.right_dragged = False
+        self.left_press_global_pos = None
+        self.window_start_pos = None
+
+    # パンできる状態か確認する
+    def can_pan(self):
+        horizontal_scrollable = (
+            self.horizontalScrollBar().maximum()
+            > self.horizontalScrollBar().minimum()
+        )
+
+        vertical_scrollable = (
+            self.verticalScrollBar().maximum()
+            > self.verticalScrollBar().minimum()
+        )
+
+        return horizontal_scrollable or vertical_scrollable
     
     def restore_zoom_anchor(self, scene_pos_before, global_pos):
         # ウィンドウサイズ変更後のマウスポインタ位置を View座標へ変換
@@ -741,10 +1142,26 @@ class ImageView(QGraphicsView):
             event.accept()
             return
 
-        # 右クリック開始時にパンモードに移行
+        # 右クリック開始時：パンの準備
         if event.button() == Qt.RightButton:
-            self.is_panning = True
-            self.last_mouse_pos = event.position().toPoint()
+            self.right_press_pos = event.position().toPoint()
+            self.last_mouse_pos = self.right_press_pos
+
+            self.right_dragged = False
+            self.is_panning = False
+
+            event.accept()
+            return
+        
+        # 左クリック開始時：ウィンドウ移動の準備
+        if event.button() == Qt.LeftButton:
+            self.left_press_global_pos = (
+                event.globalPosition().toPoint()
+            )
+
+            self.window_start_pos = (
+                self.window().pos()
+            )
 
             event.accept()
             return
@@ -753,18 +1170,62 @@ class ImageView(QGraphicsView):
     
     # 右クリック押下 + マウス移動中に Scene の表示位置をずらす
     def mouseMoveEvent(self, event):
-        if self.is_panning and self.last_mouse_pos is not None:
+        # 左ドラッグ中はウィンドウ自体を移動
+        if (
+            self.left_press_global_pos is not None
+            and event.buttons() & Qt.LeftButton
+        ):
+            current_global_pos = (
+                event.globalPosition().toPoint()
+            )
+
+            delta = (
+                current_global_pos
+                - self.left_press_global_pos
+            )
+
+            self.window().move(
+                self.window_start_pos + delta
+            )
+
+            event.accept()
+            return
+
+        if (
+            self.right_press_pos is not None
+            and event.buttons() & Qt.RightButton
+        ):
             current_pos = event.position().toPoint()
 
-            delta = current_pos - self.last_mouse_pos
+            # まだドラッグ判定されていない場合
+            if not self.right_dragged:
+                drag_distance = (
+                    current_pos - self.right_press_pos
+                ).manhattanLength()
 
-            self.horizontalScrollBar().setValue(
-                self.horizontalScrollBar().value() - delta.x()
-            )
+                drag_threshold = (
+                    QApplication.styleHints().startDragDistance()
+                )
 
-            self.verticalScrollBar().setValue(
-                self.verticalScrollBar().value() - delta.y()
-            )
+                if drag_distance >= drag_threshold:
+                    self.right_dragged = True
+
+                    if self.can_pan():
+                        self.is_panning = True
+
+            # パン中なら画像を移動
+            if self.is_panning:
+                delta = current_pos - self.last_mouse_pos
+
+                self.horizontalScrollBar().setValue(
+                    self.horizontalScrollBar().value()
+                    - delta.x()
+                )
+
+                self.verticalScrollBar().setValue(
+                    self.verticalScrollBar().value()
+                    - delta.y()
+                )
 
             self.last_mouse_pos = current_pos
 
@@ -773,11 +1234,33 @@ class ImageView(QGraphicsView):
 
         super().mouseMoveEvent(event)
     
-    # 右クリックを離すとパンモード終了
+    
     def mouseReleaseEvent(self, event):
+        # 左クリックを離すとウィンドウ移動終了
+        if event.button() == Qt.LeftButton:
+            # 上側へはみ出した場合だけウィンドウ位置を戻す
+            self.window().restore_window_top_boundary()
+
+            self.left_press_global_pos = None
+            self.window_start_pos = None
+
+            event.accept()
+            return
+        
+        # 右クリックを離すとパンモード終了
         if event.button() == Qt.RightButton:
+            # ドラッグされていなければ通常の右クリック
+            show_menu = not self.right_dragged
+
             self.is_panning = False
             self.last_mouse_pos = None
+            self.right_press_pos = None
+            self.right_dragged = False
+
+            if show_menu:
+                self.window().show_context_menu(
+                    event.globalPosition().toPoint()
+                )
 
             event.accept()
             return
@@ -800,7 +1283,7 @@ def main():
     # Window表示後に初期画像サイズを計算する
     QTimer.singleShot(
         0,
-        window.reset_to_initial_view,
+        window.initialize_view,
     )
 
     # app.exec() でウィンドウを開いたままユーザー操作を待ち続けるイベントループを開始する

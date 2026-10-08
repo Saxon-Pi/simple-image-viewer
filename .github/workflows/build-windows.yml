@@ -24,7 +24,13 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Build application
-        run: pyinstaller --windowed --onefile --name SimpleImageViewer main.py
+        run: >
+          pyinstaller
+          --windowed
+          --onefile
+          --name SimpleImageViewer
+          --add-data "assets/icons;assets/icons"
+          main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
