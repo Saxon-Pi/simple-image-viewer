@@ -24,10 +24,10 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Build application
+        # --onefile から --onedir に変更して起動時間を比較する
         run: >
           pyinstaller
           --windowed
-          # 元々は --onefile だったが、起動時の高速化のために --onedir に変更
           --onedir
           --name SimpleImageViewer
           --add-data "assets/icons;assets/icons"
