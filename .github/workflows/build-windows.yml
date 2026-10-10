@@ -24,10 +24,11 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Build application
+        # --onefile から --onedir に変更して起動時間を比較する
         run: >
           pyinstaller
           --windowed
-          --onefile
+          --onedir
           --name SimpleImageViewer
           --add-data "assets/icons;assets/icons"
           main.py
@@ -36,4 +37,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SimpleImageViewer-Windows
-          path: dist/SimpleImageViewer.exe
+          path: dist/SimpleImageViewer/
+          if-no-files-found: error
