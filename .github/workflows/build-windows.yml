@@ -27,7 +27,8 @@ jobs:
         run: >
           pyinstaller
           --windowed
-          --onefile
+          # 元々は --onefile だったが、起動時の高速化のために --onedir に変更
+          --onedir
           --name SimpleImageViewer
           --add-data "assets/icons;assets/icons"
           main.py
