@@ -37,4 +37,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SimpleImageViewer-Windows
-          path: dist/SimpleImageViewer.exe
+          path: dist/SimpleImageViewer/
+          if-no-files-found: error
